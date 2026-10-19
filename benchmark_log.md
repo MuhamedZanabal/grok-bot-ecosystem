@@ -13,3 +13,14 @@
 - **rejected:** gating CI on latency, because shared runners make timings noisy.
 - **tradeoffs:** single machine, small n; no load or concurrency benchmark.
 - **reversal criteria:** p50 execute overhead > 10 ms on comparable hardware, or the ledger becomes a bottleneck in Cycle 7 workloads.
+
+## B-0002: CI runner overhead measurement
+- **decision_id:** B-0002
+- **date:** 2026-10-19
+- **problem:** Record the same benchmark on GitHub-hosted runners for cross-environment comparison.
+- **options:** n/a (observation).
+- **evidence:** CI run 39319720689, job `test (3.13)`: `BENCH execute n=200 p50_ms=1.591 p95_ms=2.097 max_ms=3.644`; `BENCH replay n=200 p50_ms=0.330 p95_ms=0.437 max_ms=2.467`.
+- **selected:** informational only; no delta (first measurement).
+- **rejected:** gating on these numbers.
+- **tradeoffs:** shared runners are noisy.
+- **reversal criteria:** as B-0001.

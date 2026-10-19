@@ -1,7 +1,7 @@
 {
   "cycle_id": "cycle-001-control-plane",
-  "head_sha": "2784633b4300e6f005bee2b6b3401e420a9fcd55",
-  "head_sha_note": "SHA of the implementation commit on cycle-1/control-plane. Artifact-only commits that follow cannot embed their own SHA; see integration_log.md for the final branch head.",
+  "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
+  "head_sha_note": "Last commit verified by CI (run 39319720689). The commit containing this manifest is artifact-only and cannot embed its own SHA; its CI run is linked from PR #1.",
   "baseline_sha": "b7fa4c351da1bc89983346ee5ae8f23fbf6b7920",
   "branch": "cycle-1/control-plane",
   "baseline_inspection": {
@@ -70,12 +70,13 @@
     "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 52 tests, OK (Python 3.13.5 and 3.11 via uv)",
     "adversarial": "ADVERSARIAL cases=20 unauthorized_executions=0",
     "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=10 killed=10",
-    "ci": "UNKNOWN at time of writing; recorded in integration_log.md after the PR run"
+    "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
   },
   "economics": {
     "expected_revenue_usd": 0,
     "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no cost telemetry until Cycle 8)",
     "measured_cost_usd": "UNKNOWN"
   },
-  "last_updated": "2026-10-19T20:45:00Z"
+  "last_updated": "2026-10-19T20:30:10Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1"
 }

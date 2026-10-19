@@ -11,3 +11,14 @@
 - **tradeoffs:** a replay is served before approval and budget checks, so it is free and needs no new token. Kill switch and policy still apply to replays.
 - **reversal criteria:** a guard needs to run after execution (e.g. output filtering). Add a post-execution stage instead of changing the order.
 - **CI result:** UNKNOWN at time of writing; appended below once the PR run finishes.
+
+## I-0002: CI result for PR #1
+- **decision_id:** I-0002
+- **date:** 2026-10-19
+- **problem:** Record the real CI outcome for the Cycle 1 branch.
+- **options:** n/a (observation).
+- **evidence:** `gh pr checks 1` -> `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass`. `gh run view 39319720689 --json headSha,conclusion` -> `{"conclusion":"success","headSha":"560de621c8ddb0a3817dac10630eb243e57f3ed3"}`. Log excerpts: `Ran 52 tests ... OK` on all three versions; `ADVERSARIAL cases=20 unauthorized_executions=0`; `MUTATION mutants=10 killed=10`.
+- **selected:** success metric met for `cycle-001-control-plane` at `560de621`.
+- **rejected:** n/a.
+- **tradeoffs:** CI checks the PR head. This artifact-only follow-up commit gets its own run, visible on PR #1.
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.
