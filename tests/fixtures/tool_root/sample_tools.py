@@ -51,7 +51,7 @@ def probe(args):
 
 
 def sleeper(args):
-    child = subprocess.Popen(["sleep", "60"])
+    child = subprocess.Popen(["sleep", "3599"])  # distinctive: leak checks grep for it
     with open(args["pidfile"], "w") as fh:
         fh.write(f"{os.getpid()} {child.pid}")
     time.sleep(60)

@@ -55,6 +55,8 @@ for m in "${MUTANTS[@]}"; do
   else
     echo "$name: killed"; killed=$((killed+1))
   fi
+  # a mutant that breaks process-group kill leaves the fixture's grandchild alive; reap it
+  pkill -fx "sleep 3599" 2>/dev/null || true
 done
 echo "MUTATION mutants=${#MUTANTS[@]} killed=$killed"
 exit $fail

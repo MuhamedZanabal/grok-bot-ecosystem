@@ -103,3 +103,19 @@
 - **tradeoffs:** a strict control plane is now the default; existing in-process callers must opt in explicitly.
 - **reversal criteria:** see D-0009.
 - **CI result:** UNKNOWN at time of writing; appended once the PR run finishes.
+
+## I-0008: First CI run on PR #3 failed (leak check). Root cause and fix
+- **decision_id:** I-0008
+- **date:** 2026-10-19
+- **problem:** Run 39323831631 on `42b7f9a` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) fail`. The failing step was "No leaked worker processes" (`pgrep -f "sleep 60"` gave PIDs `7904 7920`, then `leaked worker children`).
+- **options:** treat it as a product leak; or as a CI-ordering artifact.
+- **evidence:**
+  - In that same 3.13 job every functional step passed: `Ran 135 tests`, `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`, `MUTATION mutants=32 killed=32`.
+  - The leak step ran *after* the mutation check, and on 3.11/3.12, where the mutation check does not run, the same leak step passed.
+  - Mutant `worker_kill_pid_not_group` deliberately breaks the process-group kill, so it leaves the fixture's grandchild alive. Exactly two such processes were seen locally after a mutation run (one per timeout test).
+  - After the normal suite alone, `pgrep -c -f 'sleep 60'` gave `0` locally.
+  - So the failure was the check's ordering, not a product leak.
+- **selected:** fixture child is now a distinctive `sleep 3599`. The leak check runs *before* the mutation check and matches exactly (`pgrep -fx "sleep 3599"`). `scripts/mutation_check.sh` reaps that exact process after each mutant. Local verification: the full mutation check gave `MUTATION mutants=32 killed=32` and then `strays after mutation: 0`; the normal suite then gave `no leaked worker processes`.
+- **rejected:** deleting the leak check, which would lose real leak detection.
+- **tradeoffs:** none.
+- **reversal criteria:** the leak check fails with the mutation check excluded, which would indicate a real product leak.
