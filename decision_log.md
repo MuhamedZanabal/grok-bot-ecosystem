@@ -162,3 +162,44 @@
 - **rejected:** (a), because a malicious server controls the hints; (b), which skips human review.
 - **tradeoffs:** every MCP tool needs an operator decision. Registry trust state is in memory (only the audit trail persists).
 - **reversal criteria:** a signed/attested server allowlist (Cycle 9) could justify pre-accepting tools from specific servers.
+
+## D-0012: Reorder. Insert security sub-cycle `cycle-004-isolation` before browser/computer use
+- **decision_id:** D-0012
+- **date:** 2026-10-20
+- **problem:** The next default cycle (browser/computer use) will handle credentials and external accounts. RM-0003's reversal criterion says any cycle that gives tools real credentials must first close S-0005 gaps 1-2. Two more gaps (3: `setsid` escapes the kill; 5: registry trust state not persisted) undermine the same boundary.
+- **options:** (a) proceed with browser/computer use and carry the gaps; (b) pull the Cycle 9 isolation prerequisites forward as a bounded sub-cycle; (c) do all of Cycle 9 now.
+- **evidence:**
+  - `security_log.md` S-0005 open gaps 1-5, and `roadmap.md` RM-0003's reversal criterion.
+  - Tool-substrate CI run 39325010443 / `tests/test_subprocess_handler.py` shows the worker runs with the agent's UID and filesystem.
+  - `HARDENING unhardened={... 'canary': True}` showed a real same-UID `/proc/<ppid>/environ` leak when the host does not opt in.
+  - Mechanisms available on the box (probed 2026-10-20):
+    - `which bwrap unshare setpriv` gave `/usr/bin/bwrap` (`bubblewrap 0.12.0`), `/usr/bin/unshare` and `/usr/bin/setpriv`.
+    - `unshare --user --map-root-user --net --mount --pid --fork true` gave `unshare userns OK`.
+    - A bwrap probe with `--unshare-all --ro-bind /usr /usr --tmpfs /tmp` gave `home exists False workspace False`, `write /usr: OSError`, `tmp write ok`, `net: OSError 101` (network unreachable) and `pid 2 ppid 1` (own PID namespace).
+  - GitHub Actions `ubuntu-latest`: UNKNOWN until probed in CI (bubblewrap preinstalled? AppArmor `kernel.apparmor_restrict_unprivileged_userns`?).
+- **selected:** (b). Cycle definition, recorded before code:
+  - cycle_id: `cycle-004-isolation` (security sub-cycle; browser/computer use becomes cycle-005, and later cycles shift by one; see RM-0004)
+  - objective: tool workers run inside an OS sandbox (bubblewrap: user, PID, network, mount, IPC, UTS and cgroup namespaces) with:
+    - no network;
+    - a read-only filesystem limited to the interpreter, the stdlib and the tool root, plus a private writable tmpfs;
+    - no view of parent state files, the home directory or the workspace;
+    - PID-namespace teardown, so detached (`setsid`) descendants die with the worker.
+
+    If the sandbox is unavailable the handler refuses to run (fail closed), and there is no silent fallback. In addition, `ControlPlane` construction enforces host non-dumpability, and registry trust state persists in a versioned, audited SQLite store.
+  - capability area: `cap.tools.os_sandbox`, `cap.control.host_hardening`, `cap.tools.registry` (persistence)
+  - budgets: time 1 agent session; tokens UNKNOWN; repository: one branch `cycle-4/isolation`, one PR, <= ~600 new production lines; implementation: stdlib plus the system `bwrap` binary (justified in D-0013); verification: unittest, a sandbox adversarial set, an extended mutation check, CI 3.11/3.12/3.13 with the sandbox actually active.
+  - success metric (all must hold, locally and in CI):
+    1. 100% of tests pass with the sandbox enforced, with no skips of sandbox tests in CI.
+    2. 0 escapes across >= 12 sandbox adversarial cases (read ledger/grant/audit DBs, home, workspace; write outside tmp; network sockets, including the host loopback and a host Unix socket; `setsid` escape of the timeout; parent `/proc` environ), and prior adversarial sets stay at 20/0, 18/0 and 20/0.
+    3. Zero host-visible descendant processes after a timeout of a tool that spawned a `setsid` child.
+    4. `ControlPlane()` leaves the host non-dumpable, or raises.
+    5. Registry trust state and accepted tools survive a restart, with versioned, audited events.
+    6. Every new mutant is killed.
+  - expected_value: high; it unblocks credential-bearing cycles (qualitative).
+  - estimated_cost: ESTIMATE one agent session; token/$ UNKNOWN; added per-call latency UNKNOWN until measured.
+  - expected_revenue: 0.
+  - risk: medium. CI runner sandbox support is UNKNOWN until probed, and host-configuration differences may make the sandbox unavailable, in which case tools refuse to run.
+  - confidence: medium.
+- **rejected:** (a) violates RM-0003; (c) is too large for one bounded cycle (key custody, audit anchoring and content filtering stay in the later security-hardening cycle).
+- **tradeoffs:** the browser cycle is delayed by one cycle, and there is a Linux plus bubblewrap platform dependency.
+- **reversal criteria:** if bubblewrap proves unavailable or unreliable on target hosts, switch to a dedicated low-privilege UID with `setpriv` plus `unshare` (needs root, so it is deployment-specific), keeping the same `SubprocessHandler` API and the same adversarial suite.
