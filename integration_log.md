@@ -246,3 +246,17 @@
 - **rejected:** n/a.
 - **tradeoffs:** CI still depends on the AppArmor relaxation (D-0013).
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0016: PR #5 (cycle-005) merged
+- **decision_id:** I-0016
+- **date:** 2026-10-20
+- **problem:** Merge cycle-005 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 5` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39339865437 on head `8ca78c2`).
+  - `gh pr merge 5 --merge --match-head-commit 8ca78c21420b55258cfdf81b8644f3d2a0d126f1`.
+  - `gh pr view 5` gave `MERGED`, `mergeCommit 8e30c65c430d36281a5b8ba8e4cf4cedee1ddfb9`, `mergedAt 2026-10-19T23:20:30Z` (2026-10-20 02:20 UTC+3).
+- **selected:** main = `8e30c65`, the baseline for cycle-006.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.

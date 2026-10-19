@@ -349,3 +349,52 @@
 - **rejected:** a sleep-based proxy shutdown; trusting interpreter-default CA paths.
 - **tradeoffs:** `/etc/ssl` (public CA material only) is visible to egress-enabled workers.
 - **reversal criteria:** CI 3.13 job > 40 min → parallelise the mutation check.
+
+## D-0018: cycle-006 definition (provenance-tagged memory), recorded before code
+- **decision_id:** D-0018
+- **date:** 2026-10-20
+- **problem:** RM-0007. Fetched pages and other external content need to persist without ever becoming instructions, credentials or a tamper-free injection channel.
+- **options:**
+  - Store: (m1) SQLite with an FTS5 index; (m2) SQLite with LIKE search only; (m3) flat JSONL files.
+  - Tamper evidence: (t1) a per-record unkeyed SHA-256 plus a chain; (t2) a per-record HMAC-SHA256 chain under an operator key, with each write's MAC also anchored in the hash-chained audit log.
+  - Handler placement: (h1) a sandboxed worker (cannot reach the DB by design, cycle-004); (h2) a repository-owned host-side handler, i.e. TCB code with no tool or model code executing, marked as a new `TrustedHostHandler` kind and audited at bind.
+- **evidence (probes 2026-10-20 02:21 UTC+3):**
+  - Debian `python3` 3.13.5: `sqlite3.sqlite_version` is `3.46.1`, and `pragma compile_options` includes `ENABLE_FTS5`. `create virtual table t using fts5(x)` plus MATCH returned `[('hello world',)]`.
+  - uv 3.11 and 3.12: SQLite `3.53.1`, `fts5 ok`.
+  - On GitHub `setup-python` builds FTS5 is UNKNOWN; the test suite prints `MEMORY_SEARCH_MODE=...` in CI.
+  - Search quality is not a security property, so a LIKE fallback is acceptable and recorded, not silent.
+- **selected:** m1 with an m2 fallback, t2, h2. Every record carries:
+  - `record_id`, `source_id`, `origin_url` (byte-exact; a URL containing a secret shape is *refused*, not altered), `source_ref` (e.g. the fetch operation id);
+  - `trust` (`untrusted` by default; the capability path cannot set anything else);
+  - `content_sha256`, `created_at`, `expires_at`, `seq`, `prev_mac`, `mac`.
+
+  Writes go through `ControlPlane` as `cap.memory.write` (risk 1, idempotent by operation id), with dedup by content hash among live records. Retrieval goes through `cap.memory.search` (risk 0) and returns items wrapped as `{"type": "untrusted_data", "provenance": {...}, "content": ...}`. Rows whose content hash or MAC fails to verify on read are excluded and audited. Secrets are redacted before hashing and storing. Per-record size, total-size, record-count and TTL budgets apply. `browser.fetch` results are ingested as untrusted records via the control plane.
+- **cycle definition:**
+  - cycle_id: `cycle-006-memory`
+  - objective: a provenance-tagged, tamper-evident, budgeted, redacting memory store behind the control plane, fed by `cap.browser.fetch`, whose contents can never widen what policy allows.
+  - capability area: `cap.memory.knowledge`
+  - budgets: 1 agent session; tokens UNKNOWN; one branch `cycle-6/memory`, one PR; ≤ ~600 new production lines; stdlib only.
+  - success metric (all must hold, locally and in CI):
+    1. 100% of tests pass, with no skips.
+    2. A poisoned-memory run (stored content containing injected action JSON, executed by a deliberately gullible mock model) gives 0 executions outside the actor's grants, and every proposal the model makes beyond policy is refused.
+    3. A memory adversarial set (≥ 12 cases: poisoned content, oversized write, store budget, secret in content, secret in URL, tampered content/MAC/trust/deleted row, duplicate writes, trust escalation via args, expired records, FTS query injection) gives 0 violations.
+    4. A browser fetch of the local fixture is retrievable with the exact origin URL and provenance.
+    5. Prior adversarial sets stay at 20/0, 18/0, 20/0, 21/0 and 26/0.
+    6. Every new mutant is killed.
+  - expected_value: medium-high (memory is the prerequisite for research and workflows).
+  - estimated_cost: ESTIMATE one agent session; token and dollar cost UNKNOWN.
+  - expected_revenue: 0.
+  - risk: medium. The memory handler is new host TCB code.
+  - confidence: medium-high.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:**
+  - m3: no index, no atomic dedup.
+  - t1: anyone with DB write can recompute unkeyed hashes.
+  - h1: a sandboxed worker cannot reach the DB (by design), and opening a DB channel into workers would widen their reach.
+- **tradeoffs:**
+  - The MAC key lives in the host process, so a same-UID attacker who can read the key can forge records. The anchors in the audit log raise the bar but are not a remote anchor (cycle-010).
+  - Tail truncation of the memory DB is detectable only against the audit anchors.
+  - Dedup keeps the first record's provenance.
+- **reversal criteria:**
+  - FTS5 is missing on CI → LIKE fallback, recorded.
+  - The memory handler needs to run model- or tool-supplied code → it must move into a worker instead.
