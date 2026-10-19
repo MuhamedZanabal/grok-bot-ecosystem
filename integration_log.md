@@ -119,3 +119,14 @@
 - **rejected:** deleting the leak check, which would lose real leak detection.
 - **tradeoffs:** none.
 - **reversal criteria:** the leak check fails with the mutation check excluded, which would indicate a real product leak.
+
+## I-0009: CI result for PR #3 after the fix
+- **decision_id:** I-0009
+- **date:** 2026-10-19
+- **problem:** Record the real CI outcome for Cycle 3.
+- **options:** n/a (observation).
+- **evidence:** `gh pr checks 3` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass`. `gh run view 39325010443 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"12cefdd578ad96efd76cf9f58f007a5d9cac3d01"}`. Log excerpts: `Ran 135 tests` on all three; `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; `no leaked worker processes` on all three; `MUTATION mutants=32 killed=32`; `HARDENING ... hardened={'hardened': True, 'readable': False, 'canary': False}` (from run 39323831631, same tests).
+- **selected:** D-0008 success metric met in CI at `12cefdd`.
+- **rejected:** n/a.
+- **tradeoffs:** this artifact-only follow-up commit gets its own run on PR #3.
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.

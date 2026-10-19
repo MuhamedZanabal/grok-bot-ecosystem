@@ -62,3 +62,14 @@
 - **rejected:** pooling now.
 - **tradeoffs:** reliability and security over latency.
 - **reversal criteria:** p50 > 50 ms, or tool-heavy workloads where spawn time dominates.
+
+## B-0006: Tool call overhead on CI
+- **decision_id:** B-0006
+- **date:** 2026-10-19
+- **problem:** Cross-environment record for B-0005.
+- **options:** n/a (observation).
+- **evidence:** run 39323831631 `test (3.13)` gave `BENCH tool_execute_subprocess n=50 p50_ms=26.243 p95_ms=45.897`; run 39325010443 `test (3.13)` gave `p50_ms=32.387 p95_ms=33.309`. Both are below D-0008's 50 ms reversal threshold. Run-to-run spread on shared runners is about 6 ms p50.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** noisy runners.
+- **reversal criteria:** as B-0005.

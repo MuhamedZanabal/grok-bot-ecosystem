@@ -1,7 +1,7 @@
 {
   "cycle_id": "cycle-003-tool-substrate",
-  "head_sha": "dbf97a531e207e9721d609ad6fd10486dcc563a4",
-  "head_sha_note": "Cycle 3 implementation commit on cycle-3/tool-substrate. Final head and its CI run are in integration_log.md / PR.",
+  "head_sha": "12cefdd578ad96efd76cf9f58f007a5d9cac3d01",
+  "head_sha_note": "Last commit verified by CI (run 39325010443). The commit containing this manifest is artifact-only; its own CI run is linked from PR #3.",
   "baseline_sha": "27ac19430bbe25651cac2383d3063d8dbf0a297b",
   "branch": "cycle-3/tool-substrate",
   "capabilities": [
@@ -108,7 +108,7 @@
     "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
     "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=32 killed=32",
     "hardening": "HARDENING unhardened={'hardened': False, 'readable': True, 'canary': True} hardened={'hardened': True, 'readable': False, 'canary': False}",
-    "ci": "UNKNOWN at time of writing; recorded in integration_log.md after the PR run"
+    "ci": "success: run 39325010443 on 12cefdd (3.11/3.12/3.13 pass; 'Ran 135 tests'; 'TOOL_ADVERSARIAL cases=20 unauthorized_executions=0'; 'no leaked worker processes'; 'MUTATION mutants=32 killed=32'). Earlier run 39323831631 on 42b7f9a failed the leak-check step only (I-0008)."
   },
   "economics": {
     "expected_revenue_usd": 0,
@@ -116,8 +116,8 @@
     "measured_cost_usd": "UNKNOWN",
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement"
   },
-  "last_updated": "2026-10-19T20:57:50Z",
-  "pull_request": "UNKNOWN until opened (see integration_log.md)",
+  "last_updated": "2026-10-19T21:12:00Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/3",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",
