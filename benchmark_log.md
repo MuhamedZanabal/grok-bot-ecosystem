@@ -89,3 +89,14 @@
 - **rejected:** worker pooling (it would weaken per-call isolation).
 - **tradeoffs:** none material.
 - **reversal criteria:** p50 > 50 ms.
+
+## B-0008: Sandbox overhead on CI
+- **decision_id:** B-0008
+- **date:** 2026-10-20
+- **problem:** Cross-environment record for B-0007.
+- **options:** n/a (observation).
+- **evidence:** run 39329642600 `test (3.13)` gave `BENCH tool_execute_subprocess n=50 p50_ms=36.781 p95_ms=40.358 max_ms=54.282`, against B-0006 (unsandboxed) `p50 26.243 / 32.387`, so about +4 to +10 ms on a different runner instance (noise is about 6 ms). The same job gave `execute p50_ms=1.667`; `agent_run p50_ms=3.661`.
+- **selected:** informational. It stays below the 50 ms p50 threshold, but with less headroom on CI.
+- **rejected:** gating.
+- **tradeoffs:** shared-runner noise.
+- **reversal criteria:** CI p50 > 50 ms on two consecutive runs → investigate the spawn cost (e.g. a pre-built bwrap argv or a lighter probe).

@@ -1,7 +1,7 @@
 {
   "cycle_id": "cycle-004-isolation",
-  "head_sha": "UNKNOWN until pushed and verified by CI",
-  "head_sha_note": "Updated after the PR run (I-0012).",
+  "head_sha": "f0749ca0cd76068d5fc052f165636c919486b90f",
+  "head_sha_note": "Last commit verified by CI (run 39329642600). The commit containing this manifest is artifact-only; its own CI run is linked from PR #4.",
   "baseline_sha": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e",
   "branch": "cycle-4/isolation",
   "capabilities": [
@@ -115,7 +115,7 @@
     "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=42 killed=42 (exit 0; no strays)",
     "hardening": "HARDENING control_plane_construction={'before': False, 'after': True}; SANDBOX_PROC unhardened_host={'ok': False, 'visible_pids': 2, 'host_hardened': False}",
     "leaks": "pgrep -fx 'sleep 35(99|98|97|96)' -> none after handler + sandbox suites",
-    "ci": "UNKNOWN until PR run completes (I-0012)"
+    "ci": "success: run 39329642600 on f0749ca (3.11/3.12/3.13 pass; 'Ran 146 tests'; 'SANDBOX_ADVERSARIAL cases=21 escapes=0'; 'MUTATION mutants=42 killed=42'; runner: bubblewrap 0.9.0 apt-installed, AppArmor userns restriction=1 relaxed CI-only (I-0012))"
   },
   "economics": {
     "expected_revenue_usd": 0,
@@ -124,8 +124,8 @@
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
     "latency_cost": "sandbox adds ~+2 ms p50 per tool call locally (B-0007)"
   },
-  "last_updated": "2026-10-19T21:45:00Z",
-  "pull_request": "UNKNOWN (opened after this commit)",
+  "last_updated": "2026-10-19T21:58:00Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/4",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",

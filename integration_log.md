@@ -168,3 +168,21 @@
 - **tradeoffs:** see D-0013 and D-0014.
 - **reversal criteria:** any CI failure, or any escape.
 - **CI result:** appended as I-0012 once the PR run finishes.
+
+## I-0012: CI result for PR #4 (cycle-004-isolation)
+- **decision_id:** I-0012
+- **date:** 2026-10-20
+- **problem:** Record the real CI outcome, including the previously UNKNOWN runner sandbox support.
+- **options:** n/a (observation).
+- **evidence:**
+  - `gh pr checks 4` gave `test (3.11) pass 35s`, `test (3.12) pass 35s`, `test (3.13) pass 7m34s`. `gh run view 39329642600 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"f0749ca0cd76068d5fc052f165636c919486b90f"}`.
+  - **Runner sandbox facts (formerly UNKNOWN):**
+    - bubblewrap is not preinstalled; apt installed `bubblewrap 0.9.0`.
+    - `kernel.apparmor_restrict_unprivileged_userns = 1` by default, and the bwrap probe was blocked, giving `SANDBOX_CI_PROBE=blocked_relaxing_apparmor_userns_restriction`.
+    - After the CI-only `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` the probe passed, and `SANDBOX Sandbox(bwrap='/usr/bin/bwrap', python='/opt/hostedtoolcache/Python/3.1x.y/x64/bin/python3.1x')` was detected on all three jobs.
+  - All three jobs: `Ran 146 tests` OK, no skips; `ADVERSARIAL cases=20 unauthorized_executions=0`; `ORCH_ADVERSARIAL cases=18 unauthorized_executions=0`; `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; `SANDBOX_ADVERSARIAL cases=21 escapes=0`; `SANDBOX_PROC unhardened_host={'ok': False, 'visible_pids': 2, 'host_hardened': False}`; `HARDENING control_plane_construction={'before': False, 'after': True}`; `no leaked worker processes`.
+  - 3.13 job: `MUTATION mutants=42 killed=42`.
+- **selected:** the D-0012 success metric is met in CI at `f0749ca`.
+- **rejected:** n/a.
+- **tradeoffs:** CI passes only with the AppArmor userns restriction relaxed (D-0013). Default Ubuntu 24.04 hosts would fail closed until configured.
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.
