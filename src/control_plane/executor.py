@@ -15,12 +15,14 @@ from typing import Any, Callable, Mapping
 from .approvals import ApprovalAuthority, ApprovalError
 from .audit import AuditLog
 from .gateway import ActorGateway
+from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler
 from .canonical import CanonicalizationError, args_sha256, canonical_json
 from .governor import LoopGovernor, LoopState
 from .killswitch import KillSwitch
 from .ledger import IdempotencyLedger, OpState
 from .policy import ACTOR_ID, CAPABILITY_ID, PolicyEngine
 from .ratelimit import RateLimiter
+from .schema import ArgsInvalid, validate as validate_args
 
 OPERATION_ID = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 MAX_ARGS_BYTES = 64 * 1024
@@ -59,17 +61,26 @@ class ControlPlane:
     def __init__(self, *, policy: PolicyEngine, approvals: ApprovalAuthority,
                  ledger: IdempotencyLedger, audit: AuditLog, kill_switch: KillSwitch,
                  governor: LoopGovernor, rate_limiter: RateLimiter | None = None,
-                 handler_timeout_s: float = 30.0) -> None:
+                 handler_timeout_s: float = 30.0, allow_inprocess_handlers: bool = False) -> None:
         self.policy, self.approvals, self.ledger = policy, approvals, ledger
         self.audit, self.kill, self.governor = audit, kill_switch, governor
         self.rate_limiter = rate_limiter
         self.handler_timeout_s = handler_timeout_s
+        self._allow_inprocess = allow_inprocess_handlers
         self._handlers: dict[str, Handler] = {}
 
     def bind(self, capability_id: str, handler: Handler) -> None:
-        if self.policy.capability(capability_id) is None:
+        cap = self.policy.capability(capability_id)
+        if cap is None:
             raise ValueError(f"cannot bind handler to unregistered capability {capability_id}")
+        if cap.schema_json is None:
+            raise ValueError(f"capability {capability_id} has no args_schema; refusing to bind")
+        isolated = isinstance(handler, IsolatedHandler)
+        if not isolated and not self._allow_inprocess:
+            raise ValueError("in-process handlers are disabled; bind an IsolatedHandler")
         self._handlers[capability_id] = handler
+        self.audit.append("handler_bound", capability=capability_id, isolated=isolated,
+                          handler_type=type(handler).__name__)
 
     def gateway(self, actor: str) -> ActorGateway:
         """Hand an agent runtime this, never the ControlPlane or a handler."""
@@ -130,6 +141,11 @@ class ControlPlane:
         if handler is None:
             return self._out(Status.DENIED, op, "deny:no_handler_bound", **ctx)
 
+        try:
+            validate_args(self.policy.capability(cap).schema, args)
+        except ArgsInvalid as exc:
+            return self._out(Status.REJECTED, op, f"schema:{exc.code}", **ctx)
+
         digest = args_sha256(args)
         prior = self.ledger.get(op)
         if prior is not None:
@@ -183,6 +199,15 @@ class ControlPlane:
             pool.shutdown(wait=False, cancel_futures=True)
             self.ledger.finish(op, OpState.TIMED_OUT, error="handler_timeout")
             return self._out(Status.TIMED_OUT, op, "handler_timeout", **ctx)
+        except HandlerTimeout:
+            pool.shutdown(wait=False)
+            self.ledger.finish(op, OpState.TIMED_OUT, error="handler_timeout:worker_killed")
+            return self._out(Status.TIMED_OUT, op, "handler_timeout:worker_killed", **ctx)
+        except HandlerFailure as exc:
+            pool.shutdown(wait=False)
+            reason = f"worker:{exc.code}"
+            self.ledger.finish(op, OpState.FAILED, error=reason)
+            return self._out(Status.FAILED, op, reason, **ctx)
         except Exception as exc:  # handler failure is data, not a crash
             pool.shutdown(wait=False)
             reason = f"handler_error:{type(exc).__name__}"

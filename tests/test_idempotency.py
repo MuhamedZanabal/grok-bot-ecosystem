@@ -36,7 +36,8 @@ class IdempotencyTests(unittest.TestCase):
         self.h.ledger.close()
         ledger2 = IdempotencyLedger(self.h.ledger_path)
         cp2 = ControlPlane(policy=self.h.policy, approvals=self.h.approvals, ledger=ledger2,
-                           audit=self.h.audit, kill_switch=self.h.kill, governor=self.h.governor)
+                           audit=self.h.audit, kill_switch=self.h.kill, governor=self.h.governor,
+                           allow_inprocess_handlers=True)
         cp2.bind("cap.fs.write", self.h._counter("cap.fs.write"))
         out = cp2.execute(self.h.req("cap.fs.write"))
         self.assertEqual(out.status, Status.REPLAYED)

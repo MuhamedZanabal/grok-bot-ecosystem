@@ -8,6 +8,7 @@ from control_plane import (ApprovalAuthority, AuditLog, Budget, Capability, Cont
                            GrantStore, IdempotencyLedger, KillSwitch, LoopGovernor, PolicyEngine,
                            RateLimiter, RiskLevel)
 
+OPEN_SCHEMA = {"type": "object", "additionalProperties": True}
 CAPS = [("cap.fs.read", RiskLevel.READ), ("cap.fs.write", RiskLevel.LOCAL_WRITE),
         ("cap.email.send", RiskLevel.EXTERNAL), ("cap.payment.transfer", RiskLevel.IRREVERSIBLE)]
 
@@ -27,7 +28,7 @@ class Harness:
     """A fully wired control plane in a temp dir, with call counters per capability."""
 
     def __init__(self, budget: Budget | None = None, timeout: float = 2.0,
-                 rate: RateLimiter | None = None) -> None:
+                 rate: RateLimiter | None = None, inprocess: bool = True) -> None:
         self.dir = tempfile.TemporaryDirectory()
         d = self.dir.name
         self.wall = Clock()
@@ -39,7 +40,7 @@ class Harness:
         self.audit = AuditLog(self.audit_path)
         self.policy = PolicyEngine(self.grant_store, self.audit)
         for cid, risk in CAPS:
-            self.policy.register(Capability(cid, risk, f"test capability {cid}"))
+            self.policy.register(Capability(cid, risk, f"test capability {cid}", OPEN_SCHEMA))
         self.approvals = ApprovalAuthority(KEY, clock=self.wall)
         self.kill_path = os.path.join(d, "KILL")
         self.ledger = IdempotencyLedger(self.ledger_path)
@@ -47,10 +48,12 @@ class Harness:
         self.governor = LoopGovernor(budget or Budget(100, 3600, 100.0), self.kill, clock=self.mono)
         self.cp = ControlPlane(policy=self.policy, approvals=self.approvals, ledger=self.ledger,
                                audit=self.audit, kill_switch=self.kill, governor=self.governor,
-                               rate_limiter=rate, handler_timeout_s=timeout)
+                               rate_limiter=rate, handler_timeout_s=timeout,
+                               allow_inprocess_handlers=inprocess)  # legacy in-process test handlers
         self.calls: dict[str, int] = {}
-        for cid in ("cap.fs.read", "cap.fs.write", "cap.email.send", "cap.payment.transfer"):
-            self.cp.bind(cid, self._counter(cid))
+        if inprocess:
+            for cid in ("cap.fs.read", "cap.fs.write", "cap.email.send", "cap.payment.transfer"):
+                self.cp.bind(cid, self._counter(cid))
 
     def _counter(self, cid):
         def handler(args):
@@ -94,3 +97,12 @@ def make_runner(h: "Harness", *scripts, actor: str = "agent.alpha", **cfg):
                  for i, s in enumerate(scripts)]
     runner = AgentRunner(h.cp.gateway(actor), providers, h.audit, RunConfig(**cfg), h.kill, clock=h.mono)
     return runner, providers
+
+
+TOOL_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "tool_root")
+
+
+def worker(function: str, **kw):
+    from tools import WorkerSpec
+    kw.setdefault("timeout_s", 5.0)
+    return WorkerSpec(TOOL_ROOT, "sample_tools", function, **kw)

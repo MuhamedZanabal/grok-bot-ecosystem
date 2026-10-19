@@ -68,3 +68,65 @@
 - **rejected:** n/a.
 - **tradeoffs:** this artifact-only follow-up commit gets its own run on PR #2. Merging is not CI-gated (S-0004).
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0006: PR #2 merged to main
+- **decision_id:** I-0006
+- **date:** 2026-10-19
+- **problem:** Land Cycle 2.
+- **options:** merge commit pinned to head (as D-0005).
+- **evidence:** `gh pr checks 2` gave all three `pass` (run 39321650052). `gh pr merge 2 --merge --match-head-commit 6f24f4a835b8341cb1eb3932999756340fc39a54` then `gh pr view 2 --json state,mergeCommit` gave `{"mergeCommit":{"oid":"27ac19430bbe25651cac2383d3063d8dbf0a297b"},"state":"MERGED"}`.
+- **selected:** merge commit `27ac194`.
+- **rejected:** n/a.
+- **tradeoffs:** still no CI-required branch protection (S-0004).
+- **reversal criteria:** n/a.
+
+## I-0007: Cycle 3 integrated on `cycle-3/tool-substrate`
+- **decision_id:** I-0007
+- **date:** 2026-10-19
+- **problem:** Integrate out-of-process tools, schemas, the registry and the MCP adapter.
+- **options:** see D-0008 to D-0011.
+- **evidence:** definition commit `11238453e3abb8d14b1be9d73554b5b694c25afb` (D-0008, before code); implementation commit `dbf97a531e207e9721d609ad6fd10486dcc563a4` (`git diff --shortstat main HEAD -- src` gave `12 files changed, 678 insertions(+), 5 deletions(-)`, within the ~900-line budget). Local results:
+  - `python3 -m unittest discover -s tests -t .` gave `OK`.
+  - `uv run --no-project --python 3.11 python -m unittest discover -s tests -t .` gave `Ran 135 tests ... OK`.
+  - `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; prior sets still `20/0` and `18/0`.
+  - `bash scripts/mutation_check.sh` gave `MUTATION mutants=32 killed=32`.
+  - The process check after the normal suite, `pgrep -c -f 'sleep 60'`, gave `0`.
+- **success criteria (D-0008):**
+  1. Tests pass: met locally.
+  2. Worker and child dead after timeout: met (`test_timeout_kills_worker_and_its_children`; mutant `worker_kill_pid_not_group` killed).
+  3. Canary absent, no inherited fds: met (`test_env_is_allowlist_only_and_canary_absent`, `test_no_parent_file_descriptors_inherited`).
+  4. Tool code cannot import or find control-plane objects, gap test flipped: met (`test_gap_closed_tool_code_cannot_reach_handlers`).
+  5. 0 unauthorized over >= 12 new cases: met (20/0).
+  6. All new mutants killed: met (12/12).
+- **selected:** integrated as above.
+- **rejected:** n/a.
+- **tradeoffs:** a strict control plane is now the default; existing in-process callers must opt in explicitly.
+- **reversal criteria:** see D-0009.
+- **CI result:** UNKNOWN at time of writing; appended once the PR run finishes.
+
+## I-0008: First CI run on PR #3 failed (leak check). Root cause and fix
+- **decision_id:** I-0008
+- **date:** 2026-10-19
+- **problem:** Run 39323831631 on `42b7f9a` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) fail`. The failing step was "No leaked worker processes" (`pgrep -f "sleep 60"` gave PIDs `7904 7920`, then `leaked worker children`).
+- **options:** treat it as a product leak; or as a CI-ordering artifact.
+- **evidence:**
+  - In that same 3.13 job every functional step passed: `Ran 135 tests`, `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`, `MUTATION mutants=32 killed=32`.
+  - The leak step ran *after* the mutation check, and on 3.11/3.12, where the mutation check does not run, the same leak step passed.
+  - Mutant `worker_kill_pid_not_group` deliberately breaks the process-group kill, so it leaves the fixture's grandchild alive. Exactly two such processes were seen locally after a mutation run (one per timeout test).
+  - After the normal suite alone, `pgrep -c -f 'sleep 60'` gave `0` locally.
+  - So the failure was the check's ordering, not a product leak.
+- **selected:** fixture child is now a distinctive `sleep 3599`. The leak check runs *before* the mutation check and matches exactly (`pgrep -fx "sleep 3599"`). `scripts/mutation_check.sh` reaps that exact process after each mutant. Local verification: the full mutation check gave `MUTATION mutants=32 killed=32` and then `strays after mutation: 0`; the normal suite then gave `no leaked worker processes`.
+- **rejected:** deleting the leak check, which would lose real leak detection.
+- **tradeoffs:** none.
+- **reversal criteria:** the leak check fails with the mutation check excluded, which would indicate a real product leak.
+
+## I-0009: CI result for PR #3 after the fix
+- **decision_id:** I-0009
+- **date:** 2026-10-19
+- **problem:** Record the real CI outcome for Cycle 3.
+- **options:** n/a (observation).
+- **evidence:** `gh pr checks 3` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass`. `gh run view 39325010443 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"12cefdd578ad96efd76cf9f58f007a5d9cac3d01"}`. Log excerpts: `Ran 135 tests` on all three; `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; `no leaked worker processes` on all three; `MUTATION mutants=32 killed=32`; `HARDENING ... hardened={'hardened': True, 'readable': False, 'canary': False}` (from run 39323831631, same tests).
+- **selected:** D-0008 success metric met in CI at `12cefdd`.
+- **rejected:** n/a.
+- **tradeoffs:** this artifact-only follow-up commit gets its own run on PR #3.
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.

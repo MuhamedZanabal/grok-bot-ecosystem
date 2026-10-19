@@ -12,10 +12,12 @@ Wildcard grants are intentionally unsupported. Grants persist in a GrantStore
 
 from dataclasses import dataclass
 from enum import IntEnum
+import json
 import re
 from typing import TYPE_CHECKING
 
 from .grant_store import GrantStore
+from .schema import freeze
 
 if TYPE_CHECKING:
     from .audit import AuditLog
@@ -36,15 +38,39 @@ APPROVAL_THRESHOLD = RiskLevel.EXTERNAL
 
 @dataclass(frozen=True)
 class Capability:
+    """A registered capability. `args_schema` is a JSON-Schema-subset dict (control_plane.schema);
+    it is validated and stored as canonical JSON (`schema_json`) so it cannot be mutated later."""
     id: str
     risk: RiskLevel
     description: str = ""
+    args_schema: dict | None = None
+    schema_json: str | None = None
 
     def __post_init__(self) -> None:
         if not CAPABILITY_ID.fullmatch(self.id):
             raise ValueError(f"invalid capability id: {self.id!r}")
         if not isinstance(self.risk, RiskLevel):
             raise ValueError("risk must be a RiskLevel")
+        if self.args_schema is not None and self.schema_json is not None:
+            raise ValueError("pass args_schema or schema_json, not both")
+        src = self.args_schema if self.args_schema is not None else (
+            json.loads(self.schema_json) if self.schema_json is not None else None)
+        if src is not None:
+            if not isinstance(src, dict) or src.get("type") != "object":
+                raise ValueError("args_schema must be an object schema")
+            object.__setattr__(self, "schema_json", freeze(src))  # re-validated either way
+            object.__setattr__(self, "args_schema", None)  # keep only the frozen form
+
+    def __eq__(self, other: object) -> bool:
+        return (isinstance(other, Capability) and (self.id, self.risk, self.description, self.schema_json)
+                == (other.id, other.risk, other.description, other.schema_json))
+
+    def __hash__(self) -> int:
+        return hash((self.id, self.risk, self.schema_json))
+
+    @property
+    def schema(self) -> dict | None:
+        return json.loads(self.schema_json) if self.schema_json is not None else None
 
 
 @dataclass(frozen=True)
@@ -67,7 +93,7 @@ class PolicyEngine:
 
     def register(self, cap: Capability) -> None:
         if cap.id in self._caps and self._caps[cap.id] != cap:
-            raise ValueError(f"capability {cap.id} already registered with different risk")
+            raise ValueError(f"capability {cap.id} already registered with different definition")
         self._caps[cap.id] = cap
 
     def _change(self, action: str, actor: str, capability_id: str, by: str, reason: str) -> int:

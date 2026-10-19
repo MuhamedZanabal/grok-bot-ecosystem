@@ -35,3 +35,14 @@
 - **rejected:** pulling Cycle 9 forward. The highest-risk open gap (in-process reach) is structurally fixed by Cycle 3 isolation.
 - **tradeoffs:** Cycle 3 grows slightly in scope.
 - **reversal criteria:** a real provider adapter is added before Cycle 3, in which case isolation must land first.
+
+## RM-0003: Roadmap after Cycle 3
+- **decision_id:** RM-0003
+- **date:** 2026-10-19
+- **problem:** Carry Cycle 3 gaps forward.
+- **options:** keep the default order, or pull Cycle 9 forward.
+- **evidence:** S-0005 open gaps 1-7, S-0004.
+- **selected:** default order. Cycle 4 (browser/computer-use) must run its driver inside a `SubprocessHandler` worker, and before it handles credentials it must either (a) enforce `set_non_dumpable()` in a control-plane host entry point, or (b) pull forward the Cycle 9 items for uid/namespace isolation and persisted registry state. Live MCP transport stays deferred (R-0006) until a cycle needs it, and then runs inside a worker.
+- **rejected:** reordering now. Cycle 4 has no credentials in scope yet.
+- **tradeoffs:** filesystem reach by tools remains until Cycle 9.
+- **reversal criteria:** any cycle that gives tools access to real credentials or external accounts must first close S-0005 gaps 1-2.

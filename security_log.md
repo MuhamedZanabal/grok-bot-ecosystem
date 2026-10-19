@@ -61,3 +61,28 @@
 - **rejected:** see R-0005.
 - **tradeoffs:** `main` can be pushed to directly or merged red by anyone with write access. The mitigation is procedural only (the agent checks `gh pr checks` before merge, as done for PR #1).
 - **reversal criteria:** the plan is upgraded or the repo is made public, at which point the same API call is applied.
+
+## S-0005: Cycle 3 tool isolation and what remains open
+- **decision_id:** S-0005
+- **date:** 2026-10-19
+- **problem:** Close S-0003 gap 1 (handlers reachable in-process) and add argument validation.
+- **options:** see D-0008 to D-0011.
+- **evidence:**
+  - **S-0003 gap 1 closed for tool code:** `tests/test_orchestrator_adversarial.py::test_gap_closed_tool_code_cannot_reach_handlers` (the flipped pinned test). On a strict control plane every bound handler is a `SubprocessHandler` holding only a frozen `WorkerSpec`; the tool module never loads in the parent; in the worker, `importable=[]`, `loaded=[]`, `gc_hits=0`.
+  - **Env:** the worker env is exactly `{PATH, LANG}` plus explicit non-credential names. `GITHUB_TOKEN`, `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `DB_PASSWORD` and `SESSION_ID` are refused at `WorkerSpec` creation (mutant `worker_sensitive_env_ok` killed; `worker_env_inherit` killed).
+  - **Timeout:** the process group is SIGKILLed, and the worker and its child are verified dead via `/proc/<pid>/stat`.
+  - **rlimits:** a 4 GiB allocation under a 256 MiB limit gives `handler_error:MemoryError`; a CPU spinner under `cpu_s=1` gives `worker_crashed:rc=-N`.
+  - **Protocol:** tool prints to stdout and writes to inherited fds 3-9 cannot replace the real reply (`test_tool_stdout_and_fd_forgery_cannot_replace_reply`). Worker error codes are untrusted and are reduced to `[A-Za-z0-9_:=.-]{1,100}` or `worker_error`; secrets in exception messages never reach the audit log.
+  - **Schemas:** `TOOL_ADVERSARIAL` covers 10 schema-bypass cases (extra property, bool or float as integer, bounds, newline/prefix pattern smuggling, enum, length, nested extra, missing required), all `0` executions.
+  - **Finding (new, fixed in this cycle):** a same-UID worker could read the host's startup environment via `/proc/<ppid>/environ`. Evidence: `HARDENING unhardened={'hardened': False, 'readable': True, 'canary': True}`. Mitigation: `tools/hardening.py::set_non_dumpable()` (`prctl(PR_SET_DUMPABLE, 0)`) gives `hardened={'hardened': True, 'readable': False, 'canary': False}` (`HostHardeningTests`). Note `os.environ` changes made after startup do not appear in `/proc/<pid>/environ` (`RESIDUAL ... setenv_canary_visible=False`), so the exposure is the *startup* environment.
+- **selected:** subprocess isolation plus host hardening, with schemas enforced before replay, approval and execution.
+- **rejected:** claiming a sandbox.
+- **open gaps:**
+  1. **Not a sandbox.** Workers run as the same UID, with full filesystem and network access subject to OS permissions. A tool can read or write any file the agent user can, including the ledger, audit and grant SQLite files, by path. OS-level isolation (separate uid, mount/network namespaces, seccomp) is Cycle 9 (`cap.tools.os_sandbox`).
+  2. `set_non_dumpable()` is opt-in and must be called by the host at startup. Nothing enforces that today.
+  3. A tool child that calls `setsid()` leaves the process group and survives the kill.
+  4. Trusted in-process code (runner, adapters, the TCB) can still call launchers directly and skip policy (`test_residual_trusted_inprocess_code_can_invoke_launchers`). The model cannot, and tool code cannot.
+  5. Registry trust state is in memory; only audit records persist.
+  6. MCP descriptions are untrusted text and still reach the model's catalog once a tool is accepted and granted (prompt-injection vector).
+  7. rlimits are Linux-specific. On other platforms the worker limits are UNKNOWN (best-effort) and only the wall-clock kill applies.
+- **reversal criteria:** any adversarial or mutation regression blocks merge.

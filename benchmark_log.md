@@ -48,3 +48,28 @@
 - **rejected:** gating.
 - **tradeoffs:** shared-runner noise.
 - **reversal criteria:** as B-0003.
+
+## B-0005: Out-of-process tool call overhead
+- **decision_id:** B-0005
+- **date:** 2026-10-19
+- **problem:** Quantify the cost of isolation (D-0008 left this UNKNOWN).
+- **options:** n/a (measurement).
+- **evidence:** local box:
+  - `python3 bench/bench_tools.py 50` gave `BENCH tool_execute_subprocess n=50 p50_ms=24.810 p95_ms=27.606 max_ms=27.991`.
+  - The same session's in-process `python3 bench/bench_control_plane.py 200` gave `execute p50_ms=0.719`, so isolation adds about 24 ms p50 per tool call (one fresh `python -I -S` per call).
+  - `bench_orchestrator.py 100` gave `agent_run p50_ms=1.954` (against B-0003's 1.850; noise level). Its `max_ms=192.331` is a single outlier, cause UNKNOWN.
+- **selected:** accept the 24 ms. It is below D-0008's 50 ms reversal threshold.
+- **rejected:** pooling now.
+- **tradeoffs:** reliability and security over latency.
+- **reversal criteria:** p50 > 50 ms, or tool-heavy workloads where spawn time dominates.
+
+## B-0006: Tool call overhead on CI
+- **decision_id:** B-0006
+- **date:** 2026-10-19
+- **problem:** Cross-environment record for B-0005.
+- **options:** n/a (observation).
+- **evidence:** run 39323831631 `test (3.13)` gave `BENCH tool_execute_subprocess n=50 p50_ms=26.243 p95_ms=45.897`; run 39325010443 `test (3.13)` gave `p50_ms=32.387 p95_ms=33.309`. Both are below D-0008's 50 ms reversal threshold. Run-to-run spread on shared runners is about 6 ms p50.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** noisy runners.
+- **reversal criteria:** as B-0005.

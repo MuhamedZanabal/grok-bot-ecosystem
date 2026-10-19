@@ -21,12 +21,13 @@ def main(n: int) -> None:
     with tempfile.TemporaryDirectory() as d:
         audit = AuditLog(os.path.join(d, "a.jsonl"))
         pol = PolicyEngine(GrantStore(os.path.join(d, "g.sqlite")), audit)
-        pol.register(Capability("cap.bench.noop", RiskLevel.READ))
+        pol.register(Capability("cap.bench.noop", RiskLevel.READ, "", {"type": "object", "properties": {"i": {"type": "integer"}}}))
         pol.grant("bench", "cap.bench.noop")
         kill = KillSwitch(os.path.join(d, "KILL"))
         cp = ControlPlane(policy=pol, approvals=ApprovalAuthority(os.urandom(32)),
                           ledger=IdempotencyLedger(os.path.join(d, "l.sqlite")), audit=audit,
-                          kill_switch=kill, governor=LoopGovernor(Budget(n + 1, 3600, 0), kill))
+                          kill_switch=kill, governor=LoopGovernor(Budget(n + 1, 3600, 0), kill),
+                          allow_inprocess_handlers=True)
         cp.bind("cap.bench.noop", lambda a: {"ok": True})
         gw = cp.gateway("bench")
         lat = []

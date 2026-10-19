@@ -75,8 +75,11 @@
     },
     {
       "id": "cap.tools.typed_mcp",
-      "description": "Typed tool + MCP execution behind ControlPlane.execute (Cycle 3)",
-      "implementations": [],
+      "description": "Typed tool registry + MCP tools/list descriptor adapter (candidates untrusted until accepted); no transport",
+      "implementations": [
+        "src/tools/registry.py",
+        "src/tools/mcp_adapter.py"
+      ],
       "expected_value": 0.75
     },
     {
@@ -147,9 +150,50 @@
     },
     {
       "id": "cap.tools.handler_isolation",
-      "description": "Out-of-process handler execution so in-process introspection cannot reach handlers (gap S-0003)",
-      "implementations": [],
+      "description": "Per-call subprocess workers: env allowlist, no inherited fds, rlimits, process-group kill on timeout; host non-dumpable",
+      "implementations": [
+        "src/tools/subprocess_handler.py",
+        "src/tools/worker.py",
+        "src/tools/hardening.py",
+        "src/control_plane/handlers.py"
+      ],
       "expected_value": 0.75
+    },
+    {
+      "id": "cap.tools.args_schema",
+      "description": "Strict JSON-Schema-subset argument validation enforced before execution",
+      "implementations": [
+        "src/control_plane/schema.py"
+      ],
+      "expected_value": 0.8
+    },
+    {
+      "id": "cap.tools.registry",
+      "description": "Typed tool registry with candidate/accepted/rejected trust states, audited",
+      "implementations": [
+        "src/tools/registry.py"
+      ],
+      "expected_value": 0.7
+    },
+    {
+      "id": "cap.tools.mcp_adapter",
+      "description": "MCP tools/list -> candidate capability descriptors; hints never lower risk",
+      "implementations": [
+        "src/tools/mcp_adapter.py"
+      ],
+      "expected_value": 0.6
+    },
+    {
+      "id": "cap.tools.mcp_transport",
+      "description": "MCP client transport (stdio/HTTP) behind SubprocessHandler (deferred)",
+      "implementations": [],
+      "expected_value": 0.5
+    },
+    {
+      "id": "cap.tools.os_sandbox",
+      "description": "OS-level sandbox for workers (separate uid, namespaces, seccomp) (Cycle 9)",
+      "implementations": [],
+      "expected_value": 0.65
     }
   ],
   "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -196,6 +240,31 @@
     },
     {
       "from": "cap.tools.typed_mcp",
+      "to": "cap.tools.handler_isolation",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.typed_mcp",
+      "to": "cap.tools.args_schema",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.typed_mcp",
+      "to": "cap.tools.registry",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.registry",
+      "to": "cap.tools.mcp_adapter",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.mcp_transport",
+      "to": "cap.tools.handler_isolation",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.computer.browser",
       "to": "cap.tools.handler_isolation",
       "type": "depends_on"
     }
