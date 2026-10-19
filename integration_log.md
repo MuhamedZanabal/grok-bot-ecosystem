@@ -278,3 +278,30 @@
 - **rejected:** n/a.
 - **tradeoffs:** S-0008.
 - **reversal criteria:** any CI failure or violation.
+
+## I-0018: cycle-006 CI result on PR #6
+- **decision_id:** I-0018
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-006 (D-0018 required this).
+- **options:** n/a.
+- **evidence:** `gh pr checks 6` gave `test (3.11) pass 56s`, `test (3.12) pass 50s` and `test (3.13) pass 12m12s`. Run 39342990292 ran on headSha `9dd159aa67ac4138da5dcb266c228f3d0daa1d60` with conclusion `success`, from 2026-10-20 02:40 to 02:52 UTC+3. `gh run view --job <id> --log` gave the following.
+  - **All three Pythons (3.11.17, 3.12.15, 3.13.16):**
+    - `Ran 161 tests ... OK`
+    - `MEMORY_SEARCH_MODE=fts5 fts5_available=True`
+    - `MEMORY_ADVERSARIAL cases=15 violations=0`
+    - `POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied', 'denied', 'denied', 'rejected', 'denied'] dangerous_executions=0 trusted_records=0 state=completed`
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True`
+    - `FORK_BOMB ... left=0`
+    - SANDBOX 21/0, TOOL 20/0, ORCH 18/0
+    - `no leaked worker processes`
+  - **Python 3.13 only:**
+    - `MUTATION mutants=68 killed=68`
+    - `BENCH memory_write n=200 p50_ms=3.350 p95_ms=4.434 mode=fts5`
+    - `BENCH memory_search n=200 p50_ms=2.066 p95_ms=2.865`
+    - `BENCH execute p50_ms=1.781`
+    - `BENCH browser_fetch p50_ms=58.464`
+    - `BENCH tool_execute_subprocess p50_ms=36.874`
+- **selected:** cycle-006 metric met in CI; PR #6 left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0008 gaps stand. The runner kernel version is still UNKNOWN.
+- **reversal criteria:** any later red run on this branch.

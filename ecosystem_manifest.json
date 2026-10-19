@@ -1,6 +1,6 @@
 {
   "cycle_id": "cycle-006-memory",
-  "head_sha": "UNKNOWN until pushed and verified by CI",
+  "head_sha": "9dd159aa67ac4138da5dcb266c228f3d0daa1d60 (implementation; CI-verified run 39342990292). Log-only follow-up commit recording I-0018 is verified by its own PR run.",
   "head_sha_note": "Updated after the PR run.",
   "baseline_sha": "8e30c65c430d36281a5b8ba8e4cf4cedee1ddfb9",
   "branch": "cycle-6/memory",
@@ -135,10 +135,10 @@
     "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
     "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
     "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=68 killed=68 (exit 0, 620 s locally)",
-    "ci": "UNKNOWN until PR run completes",
+    "ci": "run 39342990292 on 9dd159a: success; test (3.11) pass, test (3.12) pass, test (3.13) pass; 161 tests OK x3; MUTATION 68/68 (I-0018)",
     "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
     "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
-    "memory_search_mode": "fts5 locally (3.13.5 / SQLite 3.46.1; uv 3.11/3.12 / SQLite 3.53.1); CI: see PR run"
+    "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)"
   },
   "economics": {
     "expected_revenue_usd": 0,
@@ -147,8 +147,8 @@
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
     "latency_cost": "memory write p50 ~2.2 ms, search ~1.3 ms locally (B-0011)"
   },
-  "last_updated": "2026-10-19T23:55:00Z",
-  "pull_request": "UNKNOWN (opened after this commit)",
+  "last_updated": "2026-10-20T00:00:00Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/6 (open, not merged)",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",

@@ -139,3 +139,17 @@
 - **rejected:** gating.
 - **tradeoffs:** a 200-record store only; scaling to the 10k-record budget is UNKNOWN (not measured).
 - **reversal criteria:** search p50 > 50 ms at budget size.
+
+## B-0012: Memory bench on the CI runner
+- **decision_id:** B-0012
+- **date:** 2026-10-20
+- **problem:** Record the CI-runner memory latency next to B-0011 (local).
+- **options:** n/a (measurement).
+- **evidence:** run 39342990292, job test (3.13):
+  - `BENCH memory_write n=200 p50_ms=3.350 p95_ms=4.434 mode=fts5`
+  - `BENCH memory_search n=200 p50_ms=2.066 p95_ms=2.865`
+  - Same job: `BENCH execute n=200 p50_ms=1.781`, so a write adds about 1.6 ms and a search about 0.3 ms over a bare execute.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** single run; runner noise; 200-record store only.
+- **reversal criteria:** as B-0011.
