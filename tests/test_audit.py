@@ -14,6 +14,7 @@ class AuditTests(unittest.TestCase):
     def setUp(self):
         self.h = Harness()
         self.h.policy.grant("agent.alpha", "cap.email.send")
+        self.base = verify_chain(self.h.audit_path)[1]  # records written by setUp (grant audit)
 
     def tearDown(self):
         self.h.close()
@@ -50,7 +51,7 @@ class AuditTests(unittest.TestCase):
     def test_chain_verifies_and_detects_tampering(self):
         for i in range(5):
             self.h.audit.append("e", i=i)
-        self.assertEqual(verify_chain(self.h.audit_path), (True, 5, ""))
+        self.assertEqual(verify_chain(self.h.audit_path), (True, self.base + 5, ""))
         lines = self._raw().splitlines()
         rec = json.loads(lines[2])
         rec["data"]["i"] = 999
@@ -75,14 +76,14 @@ class AuditTests(unittest.TestCase):
     def test_reopen_continues_chain(self):
         self.h.audit.append("a")
         AuditLog(self.h.audit_path).append("b")
-        self.assertEqual(verify_chain(self.h.audit_path), (True, 2, ""))
+        self.assertEqual(verify_chain(self.h.audit_path), (True, self.base + 2, ""))
 
     def test_cli_verify(self):
         self.h.audit.append("a")
         env = dict(os.environ, PYTHONPATH=SRC)
         r = subprocess.run([sys.executable, "-m", "control_plane", "audit-verify", self.h.audit_path],
                            env=env, capture_output=True, text=True)
-        self.assertEqual((r.returncode, r.stdout.strip()), (0, "ok records=1"))
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, f"ok records={self.base + 1}"))
 
 
 if __name__ == "__main__":
