@@ -121,3 +121,83 @@ class ToolRegistryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegistryPersistenceTests(unittest.TestCase):
+    """cycle-004 (c): trust state is persisted, versioned and audited; it survives restart."""
+
+    def setUp(self):
+        import os
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "registry.sqlite")
+        self.harnesses = []
+
+    def tearDown(self):
+        for h in self.harnesses:
+            h.close()
+        self.tmp.cleanup()
+
+    def boot(self):
+        from tools import RegistryStore
+        h = Harness(inprocess=False)
+        self.harnesses.append(h)
+        return h, ToolRegistry(h.policy, h.cp, h.audit, RegistryStore(self.path))
+
+    def populate(self):
+        h, reg = self.boot()
+        reg.register_local("cap.local.echo", RiskLevel.READ, "echo", ECHO_SCHEMA, worker("echo"), by="zanabal")
+        reg.import_mcp("docs", MCP_PAYLOAD, by="importer")
+        reg.accept("cap.mcp_docs.search_docs", risk=RiskLevel.READ, worker=worker("echo"), by="zanabal", reason="reviewed")
+        reg.reject("cap.mcp_docs.delete_repo", by="zanabal", reason="destructive")
+        return h, reg
+
+    def test_state_survives_restart(self):
+        _, reg1 = self.populate()
+        before = {s.capability_id: (s.trust, s.risk) for s in reg1.all()}
+        v1 = reg1.version
+        h2, reg2 = self.boot()
+        self.assertEqual({s.capability_id: (s.trust, s.risk) for s in reg2.all()}, before)
+        self.assertEqual(reg2.version, v1)
+        self.assertEqual(reg2.get("cap.mcp_docs.search_docs").trust, TrustState.ACCEPTED)
+        self.assertEqual(reg2.get("cap.mcp_docs.delete_repo").trust, TrustState.REJECTED)
+        # accepted tools are re-bound (sandboxed) and still need a grant
+        req = h2.req("cap.local.echo", op="op-reload-01", args={"text": "hi"})
+        self.assertEqual(h2.cp.execute(req).status, Status.DENIED)
+        h2.policy.grant("agent.alpha", "cap.local.echo")
+        out = h2.cp.execute(h2.req("cap.local.echo", op="op-reload-02", args={"text": "hi"}))
+        self.assertEqual(out.status, Status.EXECUTED, out)
+        # candidates and rejected tools stay non-executable after restart
+        for cap in ("cap.mcp_docs.delete_repo", "cap.mcp_docs.uses_ref"):
+            self.assertNotEqual(h2.cp.execute(h2.req(cap, op=f"op-reload-{cap[-4:]}", args={})).status,
+                                Status.EXECUTED)
+
+    def test_versioned_history_and_audit(self):
+        h1, reg1 = self.populate()
+        from tools import RegistryStore
+        store = RegistryStore(self.path)
+        hist = store.history()
+        store.close()
+        versions = [e["version"] for e in hist]
+        self.assertEqual(versions, sorted(set(versions)))
+        self.assertEqual(versions[-1], reg1.version)
+        self.assertEqual([e["event"] for e in hist if e["capability_id"] == "cap.mcp_docs.search_docs"],
+                         ["tool_candidate", "tool_accepted"])
+        with open(h1.audit_path) as fh:
+            ev = [json.loads(line) for line in fh]
+        stamped = [e for e in ev if e.get("event", "").startswith("tool_") and "registry_version" in json.dumps(e)]
+        self.assertGreaterEqual(len(stamped), len(hist))
+        h2, _ = self.boot()
+        with open(h2.audit_path) as fh:
+            self.assertIn("tool_reloaded", fh.read())
+
+    def test_tampered_worker_spec_fails_closed_on_reload(self):
+        import sqlite3
+        self.populate()
+        db = sqlite3.connect(self.path)
+        db.execute("UPDATE tools SET worker_json=json_set(worker_json, '$.module', '../../evil')"
+                   " WHERE capability_id='cap.local.echo'")
+        db.commit()
+        db.close()
+        with self.assertRaises(ValueError):
+            self.boot()

@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping
 from .approvals import ApprovalAuthority, ApprovalError
 from .audit import AuditLog
 from .gateway import ActorGateway
+from .hardening import set_non_dumpable
 from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler
 from .canonical import CanonicalizationError, args_sha256, canonical_json
 from .governor import LoopGovernor, LoopState
@@ -57,11 +58,20 @@ class Outcome:
 Handler = Callable[[dict], Any]
 
 
+class HostHardeningError(RuntimeError):
+    """The host process could not be made non-dumpable; the control plane refuses to start."""
+
+
 class ControlPlane:
     def __init__(self, *, policy: PolicyEngine, approvals: ApprovalAuthority,
                  ledger: IdempotencyLedger, audit: AuditLog, kill_switch: KillSwitch,
                  governor: LoopGovernor, rate_limiter: RateLimiter | None = None,
-                 handler_timeout_s: float = 30.0, allow_inprocess_handlers: bool = False) -> None:
+                 handler_timeout_s: float = 30.0, allow_inprocess_handlers: bool = False,
+                 require_host_hardening: bool = True) -> None:
+        hardened = set_non_dumpable()
+        if require_host_hardening and not hardened:
+            raise HostHardeningError("prctl(PR_SET_DUMPABLE, 0) failed; refusing to start")
+        audit.append("host_hardening", non_dumpable=hardened, required=require_host_hardening)
         self.policy, self.approvals, self.ledger = policy, approvals, ledger
         self.audit, self.kill, self.governor = audit, kill_switch, governor
         self.rate_limiter = rate_limiter
@@ -80,7 +90,8 @@ class ControlPlane:
             raise ValueError("in-process handlers are disabled; bind an IsolatedHandler")
         self._handlers[capability_id] = handler
         self.audit.append("handler_bound", capability=capability_id, isolated=isolated,
-                          handler_type=type(handler).__name__)
+                          handler_type=type(handler).__name__,
+                          isolation=getattr(handler, "isolation", "inprocess"))
 
     def gateway(self, actor: str) -> ActorGateway:
         """Hand an agent runtime this, never the ControlPlane or a handler."""

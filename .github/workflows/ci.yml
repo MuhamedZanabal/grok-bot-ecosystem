@@ -23,6 +23,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Install and probe the OS worker sandbox (bubblewrap; justified in D-0013 / R-0009)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          bwrap --version
+          sysctl kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo "apparmor userns sysctl: absent"
+          probe() { bwrap --unshare-user --unshare-pid --unshare-net --ro-bind /usr /usr \
+                      --symlink usr/lib /lib --symlink usr/lib64 /lib64 --symlink usr/bin /bin \
+                      --proc /proc --dev /dev true; }
+          if probe; then
+            echo "SANDBOX_CI_PROBE=unprivileged_userns_ok"
+          else
+            # Ubuntu 24.04 AppArmor can block unprivileged user namespaces. Relax it on this
+            # ephemeral runner only; production hosts must allow userns for bwrap or tools fail closed.
+            echo "SANDBOX_CI_PROBE=blocked_relaxing_apparmor_userns_restriction"
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            probe
+          fi
+          python -c "import sys; sys.path.insert(0, 'src'); from tools import Sandbox; print('SANDBOX', Sandbox.detect())"
       - name: Compile (syntax lint)
         run: python -m compileall -q src tests bench
       - name: Validate artifacts are well-formed JSON
@@ -33,7 +52,9 @@ jobs:
         run: |
           python -m unittest tests.test_subprocess_handler >/dev/null 2>&1
           sleep 1
-          if pgrep -fx "sleep 3599"; then echo "leaked worker children"; exit 1; fi
+          python -m unittest tests.test_sandbox_adversarial >/dev/null 2>&1
+          sleep 1
+          if pgrep -fx "sleep 35(99|98|97|96)"; then echo "leaked worker children"; exit 1; fi
           echo "no leaked worker processes"
       - name: Mutation check (each disabled guard must fail the suite)
         if: matrix.python == '3.13'

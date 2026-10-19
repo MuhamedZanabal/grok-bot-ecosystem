@@ -73,3 +73,19 @@
 - **rejected:** gating.
 - **tradeoffs:** noisy runners.
 - **reversal criteria:** as B-0005.
+
+## B-0007: Sandbox overhead per tool call
+- **decision_id:** B-0007
+- **date:** 2026-10-20
+- **problem:** Measure the latency cost of bwrap (D-0012 left it UNKNOWN).
+- **options:** n/a (measurement).
+- **evidence:** local box, same session, `python3 bench/bench_tools.py 50`:
+  - sandboxed, three runs: `p50_ms=26.066 / 25.170 / 25.509` (p95 29.353 / 27.641 / 28.309);
+  - Cycle 3 unsandboxed code via `git stash`: `p50_ms=23.367 p95_ms=27.642`.
+  - The delta is about +2 ms p50 (about 9%). Against B-0005 (24.810) it is +0.7 ms, with cross-session noise of the same order.
+  - In-process `bench_control_plane.py 200` gave `execute p50_ms=0.733` (unchanged scale).
+  - CI numbers are recorded with the PR run.
+- **selected:** accept. It stays far below the 50 ms reversal threshold (B-0005).
+- **rejected:** worker pooling (it would weaken per-call isolation).
+- **tradeoffs:** none material.
+- **reversal criteria:** p50 > 50 ms.

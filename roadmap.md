@@ -65,3 +65,14 @@
 - **rejected:** a "3b" label, which hides the reorder.
 - **tradeoffs:** older log entries refer to the old numbers ("Cycle 7", "Cycle 8", "Cycle 9"). They are append-only and left as written. This entry is the mapping.
 - **reversal criteria:** none.
+
+## RM-0005: After cycle-004-isolation
+- **decision_id:** RM-0005
+- **date:** 2026-10-20
+- **problem:** Choose the next target.
+- **options:** cycle-005 browser/computer-use (as RM-0004), or more hardening first.
+- **evidence:** S-0006 closed RM-0003's precondition (S-0005 gaps 1-2). Remaining gaps 1, 4 and 7 are relevant to credential handling.
+- **selected:** cycle-005 browser/computer-use. Its driver runs inside the sandbox; any network access it needs must be an explicit, narrow, audited egress design, never a default. The cycle must add `RLIMIT_NPROC` or a cgroup pids limit before it handles credentials, and must not store credentials in any SQLite store reachable by same-UID host processes without cycle-010 signing (otherwise it records an UNKNOWN or gap).
+- **rejected:** further hardening first, which would push value further out. Gaps are tracked.
+- **tradeoffs:** seccomp is still absent.
+- **reversal criteria:** the CI or production probe shows bwrap blocked on target hosts → do D-0013's reversal path first.

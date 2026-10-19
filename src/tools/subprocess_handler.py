@@ -1,9 +1,12 @@
-"""IsolatedHandler that runs one tool call in a fresh worker process.
+"""IsolatedHandler that runs one tool call in a fresh, OS-sandboxed worker process.
 
-Per call: new process (python -I -S worker.py), new session/process group, empty temp
-cwd, close_fds, env built ONLY from an explicit allowlist, rlimits (CPU, address space,
-no core dumps) set inside the worker, and a wall-clock deadline after which the whole
-process group is SIGKILLed and reaped before HandlerTimeout is raised.
+Per call: a bubblewrap sandbox (tools.sandbox: no network, read-only minimal filesystem,
+private /tmp, own PID namespace) running `python -I -S /worker/worker.py`, in a new
+session/process group, with close_fds, an env built ONLY from an explicit allowlist,
+rlimits (CPU, address space, no core dumps) set inside the worker, and a wall-clock
+deadline after which the sandbox's process group is SIGKILLed (the PID namespace then
+takes every descendant down) and reaped before HandlerTimeout is raised.
+Construction fails closed with SandboxUnavailable if the sandbox cannot be established.
 """
 
 from dataclasses import dataclass
@@ -12,10 +15,11 @@ import os
 import re
 import signal
 import subprocess
-import sys
 import tempfile
 
 from control_plane import HandlerFailure, HandlerTimeout, IsolatedHandler
+
+from .sandbox import SANDBOX_TOOL_ROOT, Sandbox
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
 BASE_ENV = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
@@ -58,12 +62,14 @@ class WorkerSpec:
 
 
 class SubprocessHandler(IsolatedHandler):
-    __slots__ = ("spec",)
+    __slots__ = ("spec", "_sandbox")
+    isolation = "bwrap"
 
     def __init__(self, spec: WorkerSpec) -> None:
         if not isinstance(spec, WorkerSpec):
             raise TypeError("spec must be a WorkerSpec")
         object.__setattr__(self, "spec", spec)
+        object.__setattr__(self, "_sandbox", Sandbox.detect())  # raises SandboxUnavailable
 
     def __setattr__(self, name, value) -> None:
         raise AttributeError("SubprocessHandler is immutable")
@@ -80,13 +86,14 @@ class SubprocessHandler(IsolatedHandler):
 
     def __call__(self, args: dict):
         s = self.spec
-        request = json.dumps({"v": 1, "tool_root": s.tool_root, "module": s.module, "function": s.function,
+        request = json.dumps({"v": 1, "tool_root": SANDBOX_TOOL_ROOT, "module": s.module, "function": s.function,
                               "args": args, "limits": {"cpu_s": s.cpu_s, "memory_mb": s.memory_mb}},
                              allow_nan=False).encode()
         with tempfile.TemporaryDirectory(prefix="tool-") as cwd:
-            proc = subprocess.Popen([sys.executable, "-I", "-S", WORKER], stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=cwd,
-                                    env=self._env(), close_fds=True, start_new_session=True)
+            argv = self._sandbox.argv(WORKER, s.tool_root, self._env())
+            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, cwd=cwd, env={"PATH": "/usr/bin:/bin"},
+                                    close_fds=True, start_new_session=True)
             try:
                 out, _ = proc.communicate(request, timeout=s.timeout_s)
             except subprocess.TimeoutExpired:

@@ -87,3 +87,32 @@
 - **rejected:** an equivalent-mutant that adds noise.
 - **tradeoffs:** `close_fds` itself is not mutation-verified.
 - **reversal criteria:** any code path that creates inheritable fds (e.g. `os.set_inheritable`) is added.
+
+## R-0009: Isolation mechanisms not chosen for cycle-004
+- **decision_id:** R-0009
+- **date:** 2026-10-20
+- **problem:** Alternatives to bubblewrap (D-0013).
+- **options / evidence:**
+  - **Dedicated low-priv UID (`setpriv`/`sudo -u`):** it needs root or sudo at runtime (sudo works on the box, but a runtime sudo dependency is a privilege the agent should not hold), it gives no network or mount isolation by itself, and it does not kill setsid descendants. Kept as the reversal path.
+  - **`unshare` CLI alone:** it lacks bind-mount/tmpfs assembly without root (`--map-root-user` plus manual mounts); that is re-implementing bwrap in shell.
+  - **Docker/podman:** a daemon or extra runtime, image management, and about 100s of ms per spawn (UNKNOWN, not measured); too heavy for per-call isolation.
+  - **A setuid helper of our own:** new privileged code in the TCB.
+  - **bwrap `--unshare-all` / `-try` variants for net or pid:** `-try` silently degrades. Only cgroup uses `-try`, because it is not a security boundary here (PID namespace teardown does the descendant kill). Net, pid and user are mandatory and the probe asserts no network.
+  - **seccomp:** deferred. bwrap `--seccomp` needs a compiled BPF program; stdlib has no generator (cycle-010).
+- **selected:** bubblewrap.
+- **rejected:** the above.
+- **tradeoffs:** no syscall filter.
+- **reversal criteria:** see D-0013.
+
+## R-0010: Single-layer `worker_kill_pid_not_group` mutant retired as equivalent
+- **decision_id:** R-0010
+- **date:** 2026-10-20
+- **problem:** After the sandbox, the full mutation run gave `worker_kill_pid_not_group: SURVIVED` (`MUTATION mutants=42 killed=41`).
+- **options:** keep a surviving mutant (CI red); weaken a test; or recognise an equivalent mutant and mutate both layers.
+- **evidence:**
+  - With `proc.kill()` instead of `killpg`, only `bwrap` is SIGKILLed, but its PID-namespace init dies too and the kernel kills every namespace member, so `wait_gone(("sleep","3599"))` stays `[]`. Defence in depth makes the single mutation behaviourally equivalent.
+  - The replacement `worker_kill_pid_not_group_no_pidns` (killpg→kill **and** drop `--unshare-pid`) gave `killed` (`MUTANT_ONLY='worker_kill' bash scripts/mutation_check.sh`).
+- **selected:** replace it with the two-layer mutant. Each layer alone is covered: `sandbox_no_pidns` is killed by the adversarial setsid and `/proc` cases.
+- **rejected:** keeping it as a known survivor.
+- **tradeoffs:** `killpg` alone is no longer mutation-verified; it is redundant defence.
+- **reversal criteria:** the PID namespace becomes optional on any platform.

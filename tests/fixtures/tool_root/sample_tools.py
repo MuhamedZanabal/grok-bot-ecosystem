@@ -12,9 +12,7 @@ def echo(args):
 
 
 def mark(args):
-    """Record one execution in $TOOL_MARKER_DIR/marks (counts executions across processes)."""
-    with open(os.path.join(os.environ["TOOL_MARKER_DIR"], "marks"), "a") as fh:
-        fh.write(f"{os.getpid()}\n")
+    """Side-effect stand-in; executions are counted host-side by the tests."""
     return {"marked": True}
 
 
@@ -51,11 +49,99 @@ def probe(args):
 
 
 def sleeper(args):
-    child = subprocess.Popen(["sleep", "3599"])  # distinctive: leak checks grep for it
-    with open(args["pidfile"], "w") as fh:
-        fh.write(f"{os.getpid()} {child.pid}")
+    subprocess.Popen(["sleep", "3599"])  # distinctive: host-side leak checks grep for it
     time.sleep(60)
     return {}
+
+
+def setsid_escape(args):
+    """Try to outlive the timeout: a child in its own session, plus a double-forked daemon."""
+    subprocess.Popen(["sleep", "3598"], start_new_session=True)
+    if os.fork() == 0:
+        os.setsid()
+        if os.fork() == 0:
+            os.execv("/usr/bin/sleep", ["sleep", "3597"])
+        os._exit(0)
+    time.sleep(60)
+    return {}
+
+
+def detach_and_return(args):
+    """Return normally but leave a setsid'd child behind (must not survive the worker)."""
+    subprocess.Popen(["sleep", "3596"], start_new_session=True)
+    return {"left_child": True}
+
+
+def read_path(args):
+    try:
+        with open(args["path"], "rb") as fh:
+            return {"ok": True, "len": len(fh.read(4096))}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def list_path(args):
+    try:
+        return {"ok": True, "entries": sorted(os.listdir(args["path"]))[:50]}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def write_path(args):
+    try:
+        with open(args["path"], "w") as fh:
+            fh.write("pwned")
+        return {"ok": True}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def tcp_connect(args):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(2)
+    try:
+        s.connect((args["host"], args["port"]))
+        return {"ok": True}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+    finally:
+        s.close()
+
+
+def unix_connect(args):
+    import socket
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(args["path"])
+        return {"ok": True}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+    finally:
+        s.close()
+
+
+def udp_dns(args):
+    import socket
+    try:
+        socket.getaddrinfo("example.com", 443)
+        return {"ok": True}
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def scan_proc_environ(args):
+    """Search every visible process's environ for the canary."""
+    hits, pids = 0, 0
+    for d in os.listdir("/proc"):
+        if d.isdigit():
+            pids += 1
+            try:
+                with open(f"/proc/{d}/environ", "rb") as fh:
+                    hits += args["canary"].encode() in fh.read()
+            except OSError:
+                pass
+    return {"ok": hits > 0, "visible_pids": pids}
 
 
 def boom(args):

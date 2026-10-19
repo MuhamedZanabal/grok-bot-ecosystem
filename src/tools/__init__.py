@@ -3,7 +3,10 @@ registry, and an MCP tools/list descriptor adapter (no transport)."""
 
 from .mcp_adapter import ToolDescriptor, parse_tools_list
 from .registry import ToolRegistry, ToolSpec, TrustState
+from .registry_store import RegistryStore
+from .sandbox import Sandbox, SandboxUnavailable
 from .subprocess_handler import SubprocessHandler, WorkerError, WorkerSpec
 
 __all__ = ["ToolDescriptor", "parse_tools_list", "ToolRegistry", "ToolSpec", "TrustState",
-           "SubprocessHandler", "WorkerError", "WorkerSpec"]
+           "SubprocessHandler", "WorkerError", "WorkerSpec",
+           "RegistryStore", "Sandbox", "SandboxUnavailable"]

@@ -203,3 +203,45 @@
 - **rejected:** (a) violates RM-0003; (c) is too large for one bounded cycle (key custody, audit anchoring and content filtering stay in the later security-hardening cycle).
 - **tradeoffs:** the browser cycle is delayed by one cycle, and there is a Linux plus bubblewrap platform dependency.
 - **reversal criteria:** if bubblewrap proves unavailable or unreliable on target hosts, switch to a dedicated low-privilege UID with `setpriv` plus `unshare` (needs root, so it is deployment-specific), keeping the same `SubprocessHandler` API and the same adversarial suite.
+
+## D-0013: bubblewrap as the worker sandbox; CI system dependency
+- **decision_id:** D-0013
+- **date:** 2026-10-20
+- **problem:** Choose the OS isolation mechanism for cycle-004 (D-0012 scope (a) and (d)) that exists on this box and on GitHub `ubuntu-latest`, and justify the new apt dependency.
+- **options:** (a) `bwrap` (bubblewrap) with unprivileged user namespaces; (b) a dedicated low-privilege UID via `setpriv`/`sudo` plus `unshare`; (c) the `unshare` CLI alone; (d) Docker/podman; (e) a setuid helper of our own. Alternatives are recorded in R-0009.
+- **evidence:**
+  - Box: `/usr/bin/bwrap` is `bubblewrap 0.12.0`, root-owned, and unprivileged userns works (D-0012 probe).
+  - Implementation `src/tools/sandbox.py`: user/PID/net/IPC/UTS namespaces (cgroup `-try`), `--cap-drop ALL`, `--new-session`, `--die-with-parent`, `--clearenv`, ro `/usr` and python prefix, ro `/worker/worker.py` and `/tool`, tmpfs `/tmp`, `--remount-ro /`.
+  - Sandboxed probe output: env `{LANG, PATH, PWD=/tmp}`, cwd `/tmp`, `sys.path` `['/tool', '/usr/lib/python313.zip', '/usr/lib/python3.13', '/usr/lib/python3.13/lib-dynload']`, fds `{0 pipe, 1 /dev/null, 2 /dev/null, 3 pipe}`.
+  - `python3 -m unittest tests.test_sandbox_adversarial` gave `SANDBOX_ADVERSARIAL cases=21 escapes=0`.
+  - Fail closed: `tests/test_sandbox.py` (missing bwrap gives `bwrap_not_found_or_untrusted` and `SubprocessHandler()` raises; a user-owned 0777 copy is refused; a failing probe gives `probe_failed:rc=`).
+  - The first 3.11 run (uv Python under `/home/box/.local/share/uv/...`) failed closed with `probe_failed:rc=1 ... AssertionError`, because the original probe demanded an empty `/home` while the interpreter itself is mounted from there. The probe now checks that every directory above an extra (Python) mount lists only the path to that mount, that the host checkout is absent, and that the network is unreachable. After that, 3.11, 3.12 and 3.13 all gave `Ran 146 tests ... OK` and `SANDBOX_ADVERSARIAL cases=21 escapes=0`.
+  - GitHub runner: bubblewrap presence and AppArmor userns policy were UNKNOWN before this PR's CI run. The CI step prints `SANDBOX_CI_PROBE=...` (recorded in I-0012).
+- **selected:** (a). The CI dependency is `apt-get install -y --no-install-recommends bubblewrap` (Ubuntu archive package, signed by the distribution; no third-party repo or PPA). If the unprivileged-userns probe fails, CI sets `kernel.apparmor_restrict_unprivileged_userns=0` **on the ephemeral runner only**. This is a CI host-configuration change, not a code path; production hosts must allow userns for bwrap, or tools fail closed.
+- **rejected:** see R-0009.
+- **tradeoffs:**
+  - Linux-only; non-Linux hosts cannot run tools at all (fail closed).
+  - The interpreter prefix is mounted read-only, so the worker can read the stdlib and site-packages of that interpreter (no secrets expected there; `-S` keeps site-packages off `sys.path`).
+  - Relaxing the AppArmor sysctl on CI weakens that runner's kernel hardening for the job's lifetime.
+  - No seccomp filter yet.
+- **reversal criteria:** bwrap unavailable or unreliable on target hosts → (b) behind the same `SubprocessHandler` API and adversarial suite. A bwrap CVE affecting non-setuid mode → pin or patch it before any credential-bearing cycle.
+
+## D-0014: Host hardening enforced at ControlPlane construction; registry trust persisted
+- **decision_id:** D-0014
+- **date:** 2026-10-20
+- **problem:** D-0012 scope (b) and (c), from S-0005 gaps 2 and 5.
+- **options:**
+  - (b1) Keep it opt-in; (b2) enforce it in `ControlPlane.__init__` and raise if it fails, with an explicit opt-out; (b3) enforce it with no opt-out.
+  - (c1) Persist only audit records; (c2) a SQLite store with an append-only `tool_events` table plus a current-state `tools` table, written in one transaction.
+- **evidence:**
+  - `tests/test_subprocess_handler.py::HostHardeningTests::test_control_plane_construction_enforces_non_dumpable` gave `HARDENING control_plane_construction={'before': False, 'after': True}`.
+  - `test_control_plane_refuses_to_start_unhardened` gives `HostHardeningError` when `set_non_dumpable` returns False.
+  - Mutants `host_hardening_optional` and `host_hardening_not_applied` were killed.
+  - `tests/test_tool_registry.py::RegistryPersistenceTests`: state and version survive restart; an accepted tool re-binds and still needs a grant; candidates and rejected tools stay non-executable; history versions are strictly increasing (`tool_candidate` → `tool_accepted`); the audit records `registry_version` and `tool_reloaded`; a tampered `worker_json` (`module='../../evil'`) makes reload raise `ValueError`.
+  - Mutants `registry_not_persisted` and `registry_reload_skips_validation` were killed.
+- **selected:** (b2) and (c2). `require_host_hardening=False` exists for platforms without prctl. It is recorded in the audit (`host_hardening` event with `required=false`), never silent. `RegistryStore` defaults to `:memory:` for callers that don't pass a path; persistence requires a file path.
+- **rejected:** (b1) is the gap itself. (b3) makes the control plane unconstructible on non-Linux even for policy-only use. (c1) cannot restore trust state.
+- **tradeoffs:**
+  - The process-wide non-dumpable flag makes the host undebuggable with ptrace and core dumps.
+  - The registry file is not integrity-protected against a same-UID writer outside the sandbox. A tampered spec is still re-validated, but the trust flag can be flipped (that belongs to cycle-010 store authentication).
+- **reversal criteria:** an operator needs ptrace on the host → use an opt-out per deployment, audited. Store tampering is observed → sign rows (cycle-010).

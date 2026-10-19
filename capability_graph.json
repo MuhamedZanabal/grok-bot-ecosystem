@@ -154,7 +154,7 @@
       "implementations": [
         "src/tools/subprocess_handler.py",
         "src/tools/worker.py",
-        "src/tools/hardening.py",
+        "src/control_plane/hardening.py",
         "src/control_plane/handlers.py"
       ],
       "expected_value": 0.75
@@ -171,7 +171,8 @@
       "id": "cap.tools.registry",
       "description": "Typed tool registry with candidate/accepted/rejected trust states, audited",
       "implementations": [
-        "src/tools/registry.py"
+        "src/tools/registry.py",
+        "src/tools/registry_store.py"
       ],
       "expected_value": 0.7
     },
@@ -191,9 +192,20 @@
     },
     {
       "id": "cap.tools.os_sandbox",
-      "description": "OS-level sandbox for workers (separate uid, namespaces, seccomp) (Cycle 9)",
-      "implementations": [],
+      "description": "OS sandbox for workers: bubblewrap user/pid/net/mount namespaces, ro fs, no network, fail closed (cycle-004); seccomp pending (cycle-010)",
+      "implementations": [
+        "src/tools/sandbox.py"
+      ],
       "expected_value": 0.65
+    },
+    {
+      "id": "cap.control.host_hardening",
+      "description": "ControlPlane construction enforces a non-dumpable host process (PR_SET_DUMPABLE=0) or refuses to start",
+      "implementations": [
+        "src/control_plane/hardening.py",
+        "src/control_plane/executor.py"
+      ],
+      "expected_value": 0.6
     }
   ],
   "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -266,6 +278,21 @@
     {
       "from": "cap.computer.browser",
       "to": "cap.tools.handler_isolation",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.handler_isolation",
+      "to": "cap.tools.os_sandbox",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.computer.browser",
+      "to": "cap.tools.os_sandbox",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.control.policy",
+      "to": "cap.control.host_hardening",
       "type": "depends_on"
     }
   ]
