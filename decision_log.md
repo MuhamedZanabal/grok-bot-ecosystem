@@ -102,3 +102,30 @@
 - **rejected:** (a), which breaks dedup; (c), deferred to Cycle 7 (workflow engine).
 - **tradeoffs:** resume relies on the model reproducing the same proposals. A non-deterministic real model may diverge on re-run, in which case new proposals simply need new approvals.
 - **reversal criteria:** Cycle 7 introduces persisted run state; then resume continues from stored state instead of re-running.
+
+## D-0008: Define Cycle 3 (typed tool + MCP execution substrate)
+- **decision_id:** D-0008
+- **date:** 2026-10-19
+- **problem:** After Cycle 2 (PR #2 merged to `main` at `27ac19430bbe25651cac2383d3063d8dbf0a297b`), handlers still run inside the control-plane process. That leaves two open gaps: tool code can reach other handlers and secrets (security_log.md S-0003 gap 1), and tool arguments are only checked for JSON-ness, never against a per-capability schema. There is also no way to describe tools in a typed registry, or to ingest external (MCP) tool definitions without trusting them.
+- **options:** (a) an in-process sandbox (restricted builtins); (b) one subprocess worker per call with a narrow JSON protocol, an explicit env allowlist, process-group kill on timeout and rlimits; (c) containers or namespaces; (d) adopt an MCP SDK.
+- **evidence:** S-0003 gap 1 and RM-0002 scope Cycle 3 to out-of-process handlers plus schema validation. Python has no reliable in-process sandbox; restricted builtins are known to be escapable, so (a) is rejected without benchmark.
+- **selected:** (b). Cycle definition, recorded before any Cycle 3 code:
+  - cycle_id: `cycle-003-tool-substrate`
+  - objective: (1) tool code runs only in a separate worker process with no inherited secrets, file descriptors or parent objects, and is killed with its process group on timeout; (2) every capability declares an argument schema in a defined JSON-Schema subset, enforced before execution; (3) a typed tool registry plus an MCP `tools/list` descriptor adapter that imports external tools as *candidate/untrusted* with `execution_allowed=false`, unregistered with policy, until an operator explicitly accepts them. Execution after that still needs a grant.
+  - capability area: `cap.tools.handler_isolation`, `cap.tools.args_schema`, `cap.tools.registry`, `cap.tools.mcp_adapter`
+  - budgets: time 1 agent session; tokens UNKNOWN; repository: one branch `cycle-3/tool-substrate`, one PR, <= ~900 new production lines; implementation: stdlib only, no network, no real MCP server connections; verification: unittest, extended adversarial set, extended mutation check, CI 3.11/3.12/3.13.
+  - success metric (all must hold, locally and in CI):
+    1. 100% of tests pass.
+    2. A timed-out worker *and its child process* are verified dead after timeout.
+    3. A canary secret in the parent environment is absent from the worker environment, and the worker inherits no parent ledger/audit/grant file descriptors.
+    4. Tool code executing in the worker cannot import or locate `control_plane`/`orchestrator` objects; the pinned in-process gap test is flipped to assert this.
+    5. 0 unauthorized executions across >= 12 new tool-substrate adversarial cases (schema bypass, candidate MCP tool execution, risk-hint downgrade, env exfiltration, worker protocol abuse); prior sets stay at 20/0 and 18/0.
+    6. Every new mutant is killed.
+  - expected_value: high; tools are how agents act, and nothing past Cycle 3 is safe without isolation (qualitative judgement).
+  - estimated_cost: ESTIMATE one agent session; token/$ UNKNOWN. Added per-call latency from process spawn: UNKNOWN until measured (B-0005).
+  - expected_revenue: 0 (prerequisite cycle).
+  - risk: low-medium. Subprocess management is new failure surface (zombie or orphan processes, platform differences: Linux-only rlimit and process-group semantics are assumed).
+  - confidence: medium. The worker runs as the *same OS user*, so this is process isolation, not a security sandbox (see S-0005).
+- **rejected:** (a) not a real boundary; (c) needs privileges and infrastructure not available or verified in CI (UNKNOWN), deferred to Cycle 9; (d) third-party code and network transport are out of scope, deferred (R-0006).
+- **tradeoffs:** process spawn per call costs latency; there are no warm workers. Schema subset semantics are deliberately stricter than JSON Schema (missing `additionalProperties` means false; `pattern` uses full match; unknown keywords are rejected).
+- **reversal criteria:** spawn latency dominates real workloads (> 50 ms p50 overhead) leads to a pooled worker with per-call reset. A need for real isolation from same-UID processes leads to uid/namespace/seccomp sandboxing in Cycle 9.
