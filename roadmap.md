@@ -76,3 +76,23 @@
 - **rejected:** further hardening first, which would push value further out. Gaps are tracked.
 - **tradeoffs:** seccomp is still absent.
 - **reversal criteria:** the CI or production probe shows bwrap blocked on target hosts → do D-0013's reversal path first.
+
+## RM-0006: cycle-005 scope and credential-broker design (not implemented)
+- **decision_id:** RM-0006
+- **date:** 2026-10-20
+- **problem:** Record cycle-005 and the credential design so later cycles cannot leak secrets to models.
+- **options:** n/a.
+- **evidence:** D-0015, D-0016.
+- **selected:**
+  - **cycle-005-browser-egress (this cycle):** egress proxy, RLIMIT_NPROC, `cap.browser.fetch`.
+  - **Credential broker interface (design only):**
+    - `CredentialBroker.bind(capability_id, credential_ref, scope)` is operator-only and audited. It stores a *reference* (vault path or keyring id); secret bytes are never in SQLite, the audit log or a WorkerSpec.
+    - Injection happens in the **egress proxy, host side**. For an allowlisted `host:port` with a bound credential, the proxy terminates TLS for that destination only, adds the header or cookie to the outgoing request, and strips any `Set-Cookie` or auth echo from the response before bytes reach the worker.
+    - The worker, and therefore the tool and the model, only ever see a `credential_ref` handle string, never the secret.
+    - Every injected use is audited with a credential_ref hash and the destination, never the value.
+    - Binding requires capability risk ≥ EXTERNAL and an approval token.
+    - Rotation, revocation and expiry belong to the cycle-010 key custody work.
+  - **Open design questions (UNKNOWN):** host-side TLS interception needs a per-destination CA trusted by the worker only; how session state for multi-step logins is held without reaching the model.
+- **rejected:** implementing it now (out of scope by instruction).
+- **tradeoffs:** none.
+- **reversal criteria:** n/a.

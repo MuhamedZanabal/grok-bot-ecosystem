@@ -186,3 +186,17 @@
 - **rejected:** n/a.
 - **tradeoffs:** CI passes only with the AppArmor userns restriction relaxed (D-0013). Default Ubuntu 24.04 hosts would fail closed until configured.
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0013: PR #4 (cycle-004-isolation) merged
+- **decision_id:** I-0013
+- **date:** 2026-10-20
+- **problem:** Merge cycle-004 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 4` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39330724213 on head `60b0a11`).
+  - `gh pr merge 4 --merge --match-head-commit 60b0a11bbaee185a75296555173c7c533f2d754a`.
+  - `gh pr view 4` gave `MERGED`, `mergeCommit 58fc1ca7f1408e2d92972374a143b7b21d38b3f7`, `mergedAt 2026-10-19T22:01:56Z` (2026-10-20 01:01 UTC+3).
+- **selected:** main = `58fc1ca`, the baseline for cycle-005.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.

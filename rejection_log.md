@@ -116,3 +116,26 @@
 - **rejected:** keeping it as a known survivor.
 - **tradeoffs:** `killpg` alone is no longer mutation-verified; it is redundant defence.
 - **reversal criteria:** the PID namespace becomes optional on any platform.
+
+## R-0011: Egress designs not chosen
+- **decision_id:** R-0011
+- **date:** 2026-10-20
+- **problem:** Alternatives to the Unix-socket filtering proxy (D-0015).
+- **options / evidence:**
+  - **(e2) Host netns + nftables/iptables:** needs root or CAP_NET_ADMIN at runtime, filters by IP (not hostname), and DNS stays inside the worker (exfil channel); any rule error opens the network.
+  - **(e3) slirp4netns/pasta:** a new system dependency (not installed: UNKNOWN on CI); it gives the worker a full IP stack and DNS, and filtering is coarse.
+  - **(e4) A TCP loopback proxy on the host:** unreachable from `--unshare-net` anyway, and if the netns were shared, every host loopback service would be exposed.
+- **selected:** e1.
+- **rejected:** e2-e4.
+- **tradeoffs:** tools must use the CONNECT protocol (the builtin client does this); unmodified programs cannot use the network.
+- **reversal criteria:** a capability needs unmodified network programs → an in-sandbox forwarder that still terminates in the same proxy.
+
+## R-0012: Playwright and CDP-direct Chrome deferred for cycle-005
+- **decision_id:** R-0012
+- **date:** 2026-10-20
+- **problem:** Browser engine selection (D-0015 b1/b2).
+- **options / evidence:** D-0015 evidence. Playwright is 136 MiB with a bundled Node runtime and a CDN browser download. Chrome is 443 MiB, needs `--no-sandbox` inside bwrap, takes about 2 s per launch, and its background network behaviour is UNKNOWN. Neither was installed or run beyond the single `--dump-dom data:` probe of the preinstalled system Chrome.
+- **selected:** defer both.
+- **rejected:** b1 and b2 for this cycle. No in-scope capability needs JavaScript, and the stdlib-only preference applies.
+- **tradeoffs:** JS-dependent sites return their pre-render HTML only.
+- **reversal criteria:** see D-0015.
