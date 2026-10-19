@@ -57,7 +57,8 @@ class Sandbox:
     bwrap: str
     python: str
 
-    def argv(self, worker_path: str, tool_root: str, env: dict[str, str]) -> list[str]:
+    def argv(self, worker_path: str, tool_root: str, env: dict[str, str],
+             extra_ro_binds: tuple[tuple[str, str], ...] = ()) -> list[str]:
         a = [self.bwrap, *NAMESPACES, "--die-with-parent", "--new-session", "--cap-drop", "ALL",
              "--ro-bind", "/usr", "/usr"]
         for p in ("/bin", "/lib", "/lib64", "/sbin", "/lib32", "/libx32"):
@@ -67,6 +68,8 @@ class Sandbox:
                 a += ["--ro-bind", p, p]
         for p in _python_mounts():
             a += ["--ro-bind", p, p]
+        for src, dst in extra_ro_binds:
+            a += ["--ro-bind", src, dst]
         a += ["--ro-bind", worker_path, SANDBOX_WORKER, "--ro-bind", tool_root, SANDBOX_TOOL_ROOT,
               "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--chdir", "/tmp",
               "--remount-ro", "/", "--clearenv"]

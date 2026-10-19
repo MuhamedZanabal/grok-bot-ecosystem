@@ -116,3 +116,33 @@
   7. No memory or PID-count cgroup limits; rlimits apply per process only (`RLIMIT_NPROC` not set, so a fork bomb inside the sandbox is bounded only by the wall-clock kill plus host limits; UNKNOWN impact, not tested).
   8. Branch protection is unavailable (S-0004).
 - **reversal criteria:** any escape or a mutant regression blocks merge.
+
+## S-0007: cycle-005: egress, fork limit, browser fetch
+- **decision_id:** S-0007
+- **date:** 2026-10-20
+- **problem:** Give sandboxed tools network access without giving up deny-by-default, and close S-0006 gap 7 (no process-count limit).
+- **options:** D-0015, R-0011, R-0012.
+- **evidence:** `tests/test_egress_adversarial.py` (26 cases, judged host-side) gave `unauthorized_egress=0`, `proxy_attempts=22 audited_attempts=22 audit_chain_ok=True`. The cases:
+  - **Not allowlisted:** non-allowlisted port, IP and name (never resolved).
+  - **DNS exfil:** via a proxy hostname, with a canary label never resolved; via the direct resolver (no network).
+  - **Bypass:** direct TCP around the proxy.
+  - **Malformed CONNECT lines (9):** CRLF-smuggled second CONNECT, uppercase host, leading-zero port, userinfo, IPv6 literal, trailing token, overlong line, non-ASCII, empty line.
+  - **Rebinding guard:** an allowlisted `localhost` resolving to 127.0.0.1 gives `resolved_non_global`.
+  - **Redirects:** to a blocked host, and to a blocked port with the canary in the query. The blocked fixture got 0 hits.
+  - **Budgets:** connection budget, and a byte budget (`budget_exhausted=True` audited).
+  - **Configuration:** a capability without egress has no socket; `file:`/`ftp:`/`gopher:` are refused; egress at risk READ is refused at registration; egress without an audit sink is refused; wildcard, CIDR and port-less entries are refused.
+  - **Fork bomb:** bounded (30 forks with `max_procs` 32; the bomb peaked at 15 with a limit of 16), killed at the timeout, 0 left over.
+- Mutants (12 new) kill each guard: allowlist skipped, resolve-before-allowlist, rebinding guard, connection budget, byte budget, lenient grammar, deny or allow not audited, egress without audit, entry validation, low-risk egress, and NPROC removed.
+- TLS verification is on (`tls_verify_failed` for a self-signed fixture), with real CA roots inside the sandbox.
+- **selected:** integrate.
+- **remaining gaps:**
+  1. **Exfiltration to an allowlisted host is permitted by design.** A tool or model can put data in URLs or bodies sent to an allowlisted destination. The mitigations are only the narrow allowlist, the approval gate (risk 2), the byte budget and the audit.
+  2. **Page content is untrusted and flows back to the model** (prompt injection). There is no content filtering (cycle-010).
+  3. **The proxy is new TCB code in the host process** (threads, sockets). A DoS by a worker is bounded by the connection and byte budgets plus the worker timeout. Read-line timeout is 5 s per connection and joins are bounded at 2 s per thread; that was not fuzzed.
+  4. **The rebinding guard is check-then-connect on the resolved IP** (we connect to the IP we checked, so there is no TOCTOU between them). IPv6 is not supported (AF_INET only).
+  5. **IPv4-literal allowlist entries bypass the non-global check by design.** Operators can allowlist internal IPs, and that is an explicit choice.
+  6. **No JavaScript engine.** JS-heavy sites return pre-render HTML only (R-0012).
+  7. **`RLIMIT_NPROC` semantics depend on per-userns ucounts (kernel ≥ 5.14).** On older kernels it would count all host processes of the UID, which is safer but could break tools. Verified here (6.12) and in CI (runner kernel version recorded with the PR run).
+  8. **Credential broker: designed only (RM-0006).** No credentials are reachable by any tool.
+  9. Earlier gaps carried over: no seccomp; trusted in-process launchers; unsigned SQLite stores; CI relaxes AppArmor userns; no branch protection.
+- **reversal criteria:** any unauthorized egress or mutant regression blocks merge.

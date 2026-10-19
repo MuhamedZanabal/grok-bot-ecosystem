@@ -100,3 +100,29 @@
 - **rejected:** gating.
 - **tradeoffs:** shared-runner noise.
 - **reversal criteria:** CI p50 > 50 ms on two consecutive runs → investigate the spawn cost (e.g. a pre-built bwrap argv or a lighter probe).
+
+## B-0009: Browser fetch via the egress proxy
+- **decision_id:** B-0009
+- **date:** 2026-10-20
+- **problem:** Measure the cost of the proxy plus HTTP plus extraction.
+- **options:** n/a (measurement).
+- **evidence:** local box:
+  - `python3 bench/bench_browser.py 30` gave `p50_ms=40.942 p95_ms=43.292 max_ms=44.885` after the wake-pipe fix. The first version gave `p50_ms=136.731` (D-0017).
+  - Same session, `bench_tools.py 50` (sandboxed echo, no egress) gave `p50_ms=29.035`.
+  - So the proxy, `/etc/ssl` mount, HTTP round trip to the local fixture and parsing add about 12 ms p50.
+  - System Chrome headless inside bwrap took about 2 s per launch (D-0015 probe; not benchmarked repeatedly).
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** the local fixture only; real-site latency is UNKNOWN.
+- **reversal criteria:** browser p50 > 200 ms locally.
+
+## B-0010: Browser fetch on CI
+- **decision_id:** B-0010
+- **date:** 2026-10-20
+- **problem:** Cross-environment record for B-0009.
+- **options:** n/a (observation).
+- **evidence:** run 39338745621 `test (3.13)` gave `BENCH browser_fetch n=30 p50_ms=61.391 p95_ms=79.018` and `tool_execute_subprocess p50_ms=38.988`, so the proxy plus fetch add about 22 ms p50 on the runner. Also `execute p50_ms=1.736`, `agent_run p50_ms=3.595`.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** runner noise.
+- **reversal criteria:** as B-0009.

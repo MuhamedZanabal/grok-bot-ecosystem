@@ -60,6 +60,7 @@ class ToolRegistry:
             if spec.trust is TrustState.ACCEPTED:
                 w = json.loads(row["worker_json"])
                 w["env_allow"] = tuple(w.get("env_allow", ()))
+                w["egress"] = tuple(w.get("egress", ()))
                 self._activate(spec, WorkerSpec(**w))  # re-validates spec + schema
             self._tools[spec.capability_id] = spec
             self._audit.append("tool_reloaded", capability=spec.capability_id, trust=spec.trust.value,
@@ -90,9 +91,13 @@ class ToolRegistry:
     def _activate(self, spec: ToolSpec, worker: WorkerSpec) -> None:
         if not spec.execution_allowed:
             raise PermissionError(f"{spec.capability_id} is not accepted")
+        if worker.egress and spec.risk < RiskLevel.EXTERNAL:
+            # network egress can send data off the box: always approval-gated (D-0015)
+            raise ValueError("egress_requires_risk_external")
+        handler = SubprocessHandler(worker, audit=self._audit, capability=spec.capability_id)
         cap = Capability(spec.capability_id, spec.risk, spec.description, schema_json=spec.schema_json)
         self._policy.register(cap)
-        self._cp.bind(spec.capability_id, SubprocessHandler(worker))
+        self._cp.bind(spec.capability_id, handler)
 
     def register_local(self, capability_id: str, risk: RiskLevel, description: str, args_schema: dict,
                        worker: WorkerSpec, *, by: str, reason: str = "") -> ToolSpec:

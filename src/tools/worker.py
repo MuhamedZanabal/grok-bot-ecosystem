@@ -26,9 +26,12 @@ def _reply(fd: int, obj: dict) -> None:
         data = data[os.write(fd, data):]
 
 
-def _limits(cpu_s: int, memory_mb: int) -> None:
+def _limits(cpu_s: int, memory_mb: int, max_procs: int) -> None:
     try:
         import resource
+        # Inside the sandbox's own user namespace RLIMIT_NPROC counts only that namespace's
+        # processes (per-userns ucounts, kernel >= 5.14; D-0015 probe). Threads count too.
+        resource.setrlimit(resource.RLIMIT_NPROC, (max_procs, max_procs))
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
         mem = memory_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
@@ -53,7 +56,7 @@ def main() -> int:
         _reply(out_fd, {"ok": False, "error": "worker_bad_request"})
         return 2
     lim = req.get("limits") or {}
-    _limits(int(lim.get("cpu_s", 5)), int(lim.get("memory_mb", 512)))
+    _limits(int(lim.get("cpu_s", 5)), int(lim.get("memory_mb", 512)), int(lim.get("max_procs", 32)))
     sys.path[:] = [req["tool_root"]] + [p for p in sys.path if p.startswith(sys.base_prefix)]
     try:
         module = __import__(req["module"], fromlist=[req["function"]])

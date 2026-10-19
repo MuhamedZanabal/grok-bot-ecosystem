@@ -245,3 +245,107 @@
   - The process-wide non-dumpable flag makes the host undebuggable with ptrace and core dumps.
   - The registry file is not integrity-protected against a same-UID writer outside the sandbox. A tampered spec is still re-validated, but the trust flag can be flipped (that belongs to cycle-010 store authentication).
 - **reversal criteria:** an operator needs ptrace on the host → use an opt-out per deployment, audited. Store tampering is observed → sign rows (cycle-010).
+
+## D-0015: cycle-005 definition (browser substrate behind audited egress), recorded before code
+- **decision_id:** D-0015
+- **date:** 2026-10-20
+- **problem:** RM-0005: the browser/computer-use substrate needs network access, but sandboxed workers have none (`--unshare-net`), and S-0006 gap 7 (no process-count limit) must close before credential-adjacent work.
+- **options:**
+  - Egress: (e1) a host-side filtering proxy reached through a Unix socket bound into the sandbox, with the worker keeping `--unshare-net`; (e2) share the host network namespace and filter with nftables or iptables; (e3) slirp4netns/pasta user-mode networking with its own filtering; (e4) an HTTP(S) forward proxy on host TCP loopback. Rejections are recorded in R-0011.
+  - Browser: (b1) Playwright plus headless Chromium; (b2) CDP-direct against a system Chrome; (b3) a stdlib HTTP fetch plus `html.parser` tool.
+  - Fork limit: (f1) `RLIMIT_NPROC` set inside the worker after it enters the user namespace; (f2) cgroup v2 `pids.max`.
+- **evidence (probes, 2026-10-20 01:00-01:10 UTC+3):**
+  - **RLIMIT_NPROC in a bwrap userns:**
+    - A script under `bwrap --unshare-user --unshare-pid --unshare-net` doing `setrlimit(RLIMIT_NPROC,(16,16))` then forking in a loop gave `fork failed after 14 BlockingIOError 11` / `forked 14`.
+    - Meanwhile the same host UID had `103` processes (`ps -u $(id -u) | wc -l`).
+    - So on this kernel (6.12.94+, per-userns ucounts) the limit counts only processes in the worker's namespace, not the host UID's.
+    - cgroup delegation on GitHub runners is UNKNOWN.
+  - **Playwright:**
+    - `pip download --no-deps playwright` (downloaded, not installed or executed) gave `playwright-1.64.0-py3-none-manylinux1_x86_64.whl`, 48 MB compressed and 136 MiB unpacked, 228 files.
+    - It bundles `playwright/driver/node` (120 MiB, a Node.js runtime).
+    - `License-Expression: Apache-2.0`. Requires `pyee`, `greenlet` (C extension).
+    - Browsers are fetched separately by `playwright install` from Playwright's CDN.
+    - Nothing was run.
+  - **CDP-direct / system Chrome:**
+    - `/usr/bin/google-chrome` is `Google Chrome 155.0.8059.84` (`/opt/google/chrome` is 443M; dpkg `Installed-Size: 452493`).
+    - Inside our bwrap sandbox (`--unshare-net`, ro `/usr`, `/opt/google/chrome` and `/etc/fonts`, tmpfs `/tmp` and `/dev/shm`), `chrome --headless --no-sandbox --dump-dom data:...` rendered `<p id="x">js-ran</p>` (JS executed), rc 0, about 2 s wall, and 115 stderr lines (GPU init errors).
+    - It needs `--no-sandbox` (Chrome's own sandbox is disabled; bwrap is the only boundary).
+    - It cannot use a Unix-socket proxy directly, so it would need an in-sandbox TCP→Unix forwarder.
+    - Chrome's own background network behaviour (updates, component fetches, telemetry) is UNKNOWN.
+    - Whether Chrome is present on GitHub `ubuntu-latest` is UNKNOWN (not verified).
+  - **stdlib fetcher:**
+    - 0 new dependencies.
+    - Per-call cost is about the existing sandbox spawn (B-0007: about 25 ms p50 locally).
+    - It speaks HTTP over a socket the worker obtains from the proxy, so the Unix-socket egress design composes with no shim.
+    - It does not execute JavaScript.
+- **selected:**
+  - **Egress (e1):** a host-side `EgressProxy` per tool call, listening on a Unix socket in a per-call directory that is bind-mounted read-only at `/run/egress`.
+    - The worker sends one line, `CONNECT host:port`.
+    - The proxy checks the capability's exact `host:port` allowlist (stored in the `WorkerSpec`) before any DNS resolution, so it never resolves or contacts non-allowlisted names (DNS exfiltration).
+    - It resolves on the host and refuses non-global resolved addresses for name entries (rebinding guard).
+    - It applies per-call connection and byte budgets, and audits every attempt (`egress_allowed`, `egress_denied`) plus each close (bytes).
+    - Workers keep `--unshare-net`.
+    - A capability with egress must have risk ≥ EXTERNAL (2), and egress without an audit sink fails closed.
+  - **Fork limit (f1):** `RLIMIT_NPROC` set by `worker.py` inside the sandbox (WorkerSpec `max_procs`, default 32), plus a fork-bomb adversarial test.
+  - **Browser (b3):** `cap.browser.fetch`, a repository-owned tool (`src/builtin_tools/browser.py`).
+    - It does HTTP/HTTPS GET via the proxy and follows redirects by itself, so every hop is a new audited CONNECT and blocked hops are denied.
+    - It extracts title, visible text and links with `html.parser`, with size, redirect and time caps.
+    - No cookies, no credentials, no JavaScript.
+  - b1 and b2 are deferred with the recorded evidence: no current capability needs JavaScript, and b1/b2 add 136 MiB to 443 MiB of third-party code, about 80× startup, a disabled inner Chrome sandbox and UNKNOWN background network behaviour.
+- **cycle definition:**
+  - cycle_id: `cycle-005-browser-egress`
+  - objective: deny-by-default, audited, per-capability network egress for sandboxed workers; a process-count limit; and a sandboxed browser-fetch capability that can only reach allowlisted hosts.
+  - capability area: `cap.tools.egress`, `cap.computer.browser` (fetch tier), `cap.tools.os_sandbox` (nproc).
+  - budgets: time 1 agent session; tokens UNKNOWN; one branch `cycle-5/browser-egress`, one PR; ≤ ~700 new production lines; stdlib only (no new pip or apt dependency); verification by unittest, egress plus browser adversarial sets, an extended mutation check, and CI 3.11/3.12/3.13.
+  - success metric (all must hold, locally and in CI):
+    1. 100% of tests pass, with no skips.
+    2. 0 unauthorized egress across ≥ 14 egress/browser adversarial cases (non-allowlisted host, wrong port, DNS exfil with 0 resolutions, redirect to a blocked host or port, CONNECT-line injection or malformation, rebinding guard, connection and byte budgets, a direct socket bypass, a capability without egress, a non-http scheme, a fork bomb).
+    3. Every egress attempt (allowed or denied) appears in the audit log, and the hash chain verifies.
+    4. The fork bomb is contained (bounded processes, worker terminates, 0 host-visible leftovers).
+    5. `cap.browser.fetch` fetches a local fixture page through the proxy and extracts title, text and links.
+    6. Prior adversarial sets stay at 20/0, 18/0, 20/0 and 21/0.
+    7. Every new mutant is killed.
+  - expected_value: medium-high (the first networked capability, under policy).
+  - estimated_cost: ESTIMATE one agent session; token and dollar cost UNKNOWN.
+  - expected_revenue: 0.
+  - risk: medium. The proxy is new TCB code in the host process.
+  - confidence: medium.
+  - abort rule: if the metric is not met within budget, emit `cycle_aborted` with evidence instead of a partial claim.
+- **rejected:** see R-0011 and R-0012.
+- **tradeoffs:**
+  - Allowlisted hosts can still receive any data the tool sends (exfiltration *to* an allowlisted host is policy-permitted).
+  - No JavaScript rendering.
+  - The proxy runs in the host process, so a proxy bug is a TCB bug.
+- **reversal criteria:**
+  - A capability needs JS rendering → b2 (system Chrome via CDP) behind an in-sandbox TCP→Unix forwarder to the same proxy, preceded by a security audit entry.
+  - `RLIMIT_NPROC` is found to count host processes on a target kernel → cgroup `pids.max`.
+
+## D-0016: Credential broker (designed, NOT implemented)
+- **decision_id:** D-0016
+- **date:** 2026-10-20
+- **problem:** Future logged-in browsing needs credentials, and models must never see secrets.
+- **options:** see RM-0006.
+- **evidence:** current invariants: the env allowlist refuses credential-like names; audit redaction; sandboxed workers have no host files or network.
+- **selected:** a design only (RM-0006). Nothing is implemented in this cycle.
+- **rejected:** passing credentials through tool args, env or model context.
+- **tradeoffs:** logged-in browsing is impossible until it is implemented.
+- **reversal criteria:** n/a.
+
+## D-0017: Implementation choices made during cycle-005
+- **decision_id:** D-0017
+- **date:** 2026-10-20
+- **problem:** Details not fixed by D-0015.
+- **options / evidence:**
+  - **TLS roots:**
+    - The uv-built 3.11 and 3.12 interpreters use a bundled OpenSSL (`OpenSSL 3.5.9`, `cafile=None`, `capath=/etc/ssl/certs`). With that, `cert_store_stats()['x509_ca']` was 0 inside the sandbox (`test_worker_has_system_ca_roots_when_egress_enabled` FAILED on 3.11/3.12 via uv; it passed on Debian's 3.13).
+    - Fix: `browser.tls_context()` falls back to the system bundle (`/etc/ssl/certs/ca-certificates.crt`, …). `/etc/ssl` is bind-mounted read-only only into sandboxes that have egress.
+    - After the fix the test passed on 3.13 and 3.11. Verification stays on: `test_tls_certificate_is_verified` gave `tls_verify_failed` for a self-signed fixture.
+  - **Proxy shutdown latency:**
+    - The first version polled `accept()` every 0.1 s, giving `BENCH browser_fetch n=30 p50_ms=136.731`.
+    - Replaced with a wake pipe in every `select()`, giving `p50_ms=40.942` (same box, same session).
+  - **Fork-bomb safety:** the test launches the unbounded bomb only after the bounded `fork_count` probe shows the limit works. That keeps the `nproc_limit_removed` mutant from running a real fork bomb on the CI host.
+  - **CI timeout:** 25 → 45 min. There are now 54 mutants, each running the full suite (about 17 s locally); the 3.13 job took 7m34s with 42 mutants on cycle-004.
+- **selected:** as above.
+- **rejected:** a sleep-based proxy shutdown; trusting interpreter-default CA paths.
+- **tradeoffs:** `/etc/ssl` (public CA material only) is visible to egress-enabled workers.
+- **reversal criteria:** CI 3.13 job > 40 min → parallelise the mutation check.

@@ -84,8 +84,12 @@
     },
     {
       "id": "cap.computer.browser",
-      "description": "Browser/computer-use substrate (Cycle 4)",
-      "implementations": [],
+      "description": "Browser substrate: cap.browser.fetch (stdlib GET + HTML extraction, no JS) in the sandbox via the egress proxy; JS engines deferred (R-0012)",
+      "implementations": [
+        "src/builtin_tools/browser.py",
+        "src/builtin_tools/egress_client.py",
+        "src/tools/builtins.py"
+      ],
       "expected_value": 0.5
     },
     {
@@ -206,6 +210,20 @@
         "src/control_plane/executor.py"
       ],
       "expected_value": 0.6
+    },
+    {
+      "id": "cap.tools.egress",
+      "description": "Deny-by-default, audited, per-capability host:port egress for sandboxed workers via a host-side Unix-socket proxy",
+      "implementations": [
+        "src/tools/egress.py"
+      ],
+      "expected_value": 0.75
+    },
+    {
+      "id": "cap.security.credential_broker",
+      "description": "Designed only: host-side credential injection in the egress proxy; models/tools see handles, never secrets (RM-0006)",
+      "implementations": [],
+      "expected_value": 0.7
     }
   ],
   "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -293,6 +311,26 @@
     {
       "from": "cap.control.policy",
       "to": "cap.control.host_hardening",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.computer.browser",
+      "to": "cap.tools.egress",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.egress",
+      "to": "cap.tools.os_sandbox",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.egress",
+      "to": "cap.control.audit_log",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.security.credential_broker",
+      "to": "cap.tools.egress",
       "type": "depends_on"
     }
   ]

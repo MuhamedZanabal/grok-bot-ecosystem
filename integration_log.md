@@ -186,3 +186,63 @@
 - **rejected:** n/a.
 - **tradeoffs:** CI passes only with the AppArmor userns restriction relaxed (D-0013). Default Ubuntu 24.04 hosts would fail closed until configured.
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0013: PR #4 (cycle-004-isolation) merged
+- **decision_id:** I-0013
+- **date:** 2026-10-20
+- **problem:** Merge cycle-004 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 4` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39330724213 on head `60b0a11`).
+  - `gh pr merge 4 --merge --match-head-commit 60b0a11bbaee185a75296555173c7c533f2d754a`.
+  - `gh pr view 4` gave `MERGED`, `mergeCommit 58fc1ca7f1408e2d92972374a143b7b21d38b3f7`, `mergedAt 2026-10-19T22:01:56Z` (2026-10-20 01:01 UTC+3).
+- **selected:** main = `58fc1ca`, the baseline for cycle-005.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.
+
+## I-0014: cycle-005-browser-egress integrated on branch `cycle-5/browser-egress`
+- **decision_id:** I-0014
+- **date:** 2026-10-20
+- **problem:** Integrate D-0015 scope: egress, fork limit, browser fetch tier.
+- **options:** D-0015, D-0017, R-0011, R-0012.
+- **evidence:**
+  - **New code:**
+    - `src/tools/egress.py` (229 lines), `src/builtin_tools/browser.py` (about 170), `src/builtin_tools/egress_client.py` (34), `src/tools/builtins.py` (36).
+    - Edited `subprocess_handler.py` (WorkerSpec `egress`, `max_procs` and budgets; the proxy lifecycle per call; egress requires audit), `registry.py` (egress requires risk ≥ EXTERNAL; handler gets the audit sink and capability id), `sandbox.py` (`extra_ro_binds`) and `worker.py` (`RLIMIT_NPROC`).
+    - About 550 new production lines, within the ≤700 budget. No new dependency.
+  - **Local runs:** `python3 -m unittest discover -s tests -t .` gave `Ran 153 tests ... OK` (3.13.5). 3.11 and 3.12 via uv also gave OK after the D-0017 CA fix.
+  - **Adversarial output:**
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True resolutions=['localhost']`. The only resolution was the allowlisted `localhost` in the rebinding-guard case; the canary and `*.invalid` names were never resolved.
+    - `FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0`.
+    - `ADVERSARIAL 20/0`, `ORCH_ADVERSARIAL 18/0`, `TOOL_ADVERSARIAL 20/0` and `SANDBOX_ADVERSARIAL 21/0` are unchanged.
+  - **Browser:** `BROWSER_FETCH {"ok": true, "status": 200, "title": "Fixture Page", "links": ["http://127.0.0.1:<port>/next", "http://other.invalid/z"]}` via registry → policy → approval → sandbox → proxy → local fixture. Without an approval it is `approval_required` (fixture hits `[]`). A `file:` URL is `rejected` by the schema. An ungranted actor is `denied`.
+  - **Mutation:**
+    - The first full run (without failfast) gave `MUTATION mutants=54 killed=54`, `exit=0`, in about 30 min locally.
+    - `unittest -f` (failfast) was then added to the mutation script for speed. A subset of 13 gave `13/13` in 96 s. The full failfast run gave `MUTATION mutants=54 killed=54`, `exit=0`, `elapsed=453s`.
+  - **Cleanup:** after the suites, `pgrep -fa "worker.py|sleep 35"` gave none. Fixture servers are shut down in `tearDown`; proxies are stopped in the handler's `finally`.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** see S-0007.
+- **reversal criteria:** any CI failure or unauthorized egress.
+
+## I-0015: CI result for PR #5 (cycle-005-browser-egress)
+- **decision_id:** I-0015
+- **date:** 2026-10-20
+- **problem:** Record the real CI outcome.
+- **options:** n/a (observation).
+- **evidence:**
+  - `gh pr checks 5` gave `test (3.11) pass 46s`, `test (3.12) pass 48s`, `test (3.13) pass 9m10s`. `gh run view 39338745621 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"b8c7a4b2d4ce91afc85d8226436c735a3ec957d0"}`.
+  - All three jobs:
+    - `Ran 153 tests` OK.
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True resolutions=['localhost']`.
+    - `FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0`. That means `RLIMIT_NPROC` is per-userns on the runner kernel too. The kernel version itself was not printed and is UNKNOWN.
+    - `BROWSER_FETCH {"ok": true, "status": 200, "title": "Fixture Page", ...}`.
+    - `SANDBOX_ADVERSARIAL 21/0`, `TOOL_ADVERSARIAL 20/0`, `ORCH_ADVERSARIAL 18/0`, `ADVERSARIAL 20/0`.
+    - `SANDBOX_CI_PROBE=blocked_relaxing_apparmor_userns_restriction` (as I-0012).
+    - The leak step printed `no leaked worker processes`. The string `leaked worker children` in the log is only the echoed script source (log line 451), not output.
+  - 3.13 job: `MUTATION mutants=54 killed=54`.
+- **selected:** the D-0015 success metric is met in CI at `b8c7a4b`.
+- **rejected:** n/a.
+- **tradeoffs:** CI still depends on the AppArmor relaxation (D-0013).
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.
