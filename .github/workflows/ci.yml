@@ -1,0 +1,37 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile (syntax lint)
+        run: python -m compileall -q src tests bench
+      - name: Validate artifacts are well-formed JSON
+        run: python -c "import json; [json.load(open(f)) for f in ('ecosystem_manifest.json','capability_graph.json')]"
+      - name: Policy invariant + adversarial tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Mutation check (each disabled guard must fail the suite)
+        if: matrix.python == '3.13'
+        run: bash scripts/mutation_check.sh
+      - name: Overhead benchmark (informational)
+        if: matrix.python == '3.13'
+        run: python bench/bench_control_plane.py 200
