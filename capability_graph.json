@@ -1,0 +1,144 @@
+{
+  "nodes": [
+    {
+      "id": "cap.control.policy",
+      "description": "Default-deny capability policy with explicit per-actor grants and risk levels 0-3",
+      "implementations": [
+        "src/control_plane/policy.py"
+      ],
+      "expected_value": 0.9
+    },
+    {
+      "id": "cap.control.approvals",
+      "description": "HMAC approval tokens bound to actor, capability, operation_id, SHA-256(canonical args), expiry (max 1h)",
+      "implementations": [
+        "src/control_plane/approvals.py"
+      ],
+      "expected_value": 0.9
+    },
+    {
+      "id": "cap.control.idempotency",
+      "description": "SQLite ledger: at-most-once execution per operation_id; replay, conflict and in_doubt states",
+      "implementations": [
+        "src/control_plane/ledger.py"
+      ],
+      "expected_value": 0.85
+    },
+    {
+      "id": "cap.control.loop_governor",
+      "description": "Iteration, wall-clock and cost budgets with sticky cycle_aborted/killed states",
+      "implementations": [
+        "src/control_plane/governor.py"
+      ],
+      "expected_value": 0.8
+    },
+    {
+      "id": "cap.control.kill_switch",
+      "description": "Global in-memory + file kill switch, fail-closed, operator CLI",
+      "implementations": [
+        "src/control_plane/killswitch.py",
+        "src/control_plane/__main__.py"
+      ],
+      "expected_value": 0.85
+    },
+    {
+      "id": "cap.control.audit_log",
+      "description": "Append-only hash-chained JSONL audit with secret redaction",
+      "implementations": [
+        "src/control_plane/audit.py"
+      ],
+      "expected_value": 0.8
+    },
+    {
+      "id": "cap.control.rate_limit",
+      "description": "Per-capability token bucket",
+      "implementations": [
+        "src/control_plane/ratelimit.py"
+      ],
+      "expected_value": 0.5
+    },
+    {
+      "id": "cap.control.persistent_policy_store",
+      "description": "Durable, versioned grants/capability registry (gap)",
+      "implementations": [],
+      "expected_value": 0.6
+    },
+    {
+      "id": "cap.orchestration.agent_runtime",
+      "description": "Model-neutral agent loop that proposes actions to the control plane (Cycle 2)",
+      "implementations": [],
+      "expected_value": 0.8
+    },
+    {
+      "id": "cap.tools.typed_mcp",
+      "description": "Typed tool + MCP execution behind ControlPlane.execute (Cycle 3)",
+      "implementations": [],
+      "expected_value": 0.75
+    },
+    {
+      "id": "cap.computer.browser",
+      "description": "Browser/computer-use substrate (Cycle 4)",
+      "implementations": [],
+      "expected_value": 0.5
+    },
+    {
+      "id": "cap.memory.knowledge",
+      "description": "Memory/knowledge substrate (Cycle 5)",
+      "implementations": [],
+      "expected_value": 0.5
+    },
+    {
+      "id": "cap.research.evidence",
+      "description": "Research + evidence engine (Cycle 6)",
+      "implementations": [],
+      "expected_value": 0.45
+    },
+    {
+      "id": "cap.workflow.scheduler",
+      "description": "Workflow/scheduling engine (Cycle 7)",
+      "implementations": [],
+      "expected_value": 0.55
+    },
+    {
+      "id": "cap.observability.cost",
+      "description": "Telemetry + cost accounting; prerequisite for economic metrics (Cycle 8)",
+      "implementations": [],
+      "expected_value": 0.7
+    },
+    {
+      "id": "cap.security.hardening",
+      "description": "Key management, sandboxing, dependency/supply-chain controls (Cycle 9)",
+      "implementations": [],
+      "expected_value": 0.7
+    },
+    {
+      "id": "cap.revenue.workflows",
+      "description": "Autonomous revenue workflows; gated on cycles 1-9 controls (Cycle 10+)",
+      "implementations": [],
+      "expected_value": 0.4
+    }
+  ],
+  "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
+  "edges": [
+    {
+      "from": "cap.orchestration.agent_runtime",
+      "to": "cap.control.policy",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.typed_mcp",
+      "to": "cap.orchestration.agent_runtime",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.revenue.workflows",
+      "to": "cap.observability.cost",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.revenue.workflows",
+      "to": "cap.security.hardening",
+      "type": "depends_on"
+    }
+  ]
+}
