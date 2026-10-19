@@ -57,3 +57,14 @@
 - **tradeoffs:** the Cycle 1 `PolicyEngine()` constructor still works but is now non-durable unless given a file-backed store.
 - **reversal criteria:** grant lookups dominate latency (they do not: B-0003).
 - **CI result:** UNKNOWN at time of writing; appended once the PR run finishes.
+
+## I-0005: CI result for PR #2
+- **decision_id:** I-0005
+- **date:** 2026-10-19
+- **problem:** Record the real CI outcome for Cycle 2.
+- **options:** n/a (observation).
+- **evidence:** `gh pr checks 2` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass`. `gh run view 39321439337 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"7a1cdace4c2218f75a3f905723c3a9356d3c88db"}`. Log excerpts: `Ran 93 tests` on 3.11, 3.12 and 3.13; `ADVERSARIAL cases=20 unauthorized_executions=0`; `ORCH_ADVERSARIAL cases=18 unauthorized_executions=0`; `MUTATION mutants=20 killed=20`.
+- **selected:** D-0004 success metric met at `7a1cdace` in CI.
+- **rejected:** n/a.
+- **tradeoffs:** this artifact-only follow-up commit gets its own run on PR #2. Merging is not CI-gated (S-0004).
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.

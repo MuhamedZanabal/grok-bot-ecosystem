@@ -37,3 +37,14 @@
 - **rejected:** gating on latency.
 - **tradeoffs:** single run, small n, no real model latency.
 - **reversal criteria:** agent-run p50 above 20 ms (overhead only), or execute p50 above 10 ms.
+
+## B-0004: Cycle 2 overhead (CI runner)
+- **decision_id:** B-0004
+- **date:** 2026-10-19
+- **problem:** Cross-environment record.
+- **options:** n/a (observation).
+- **evidence:** CI run 39321439337, job `test (3.13)`: `BENCH execute n=200 p50_ms=1.375 p95_ms=1.666`; `BENCH replay n=200 p50_ms=0.369`; `BENCH agent_run n=100 p50_ms=3.335 p95_ms=3.681 max_ms=4.021`. Against B-0002 (CI execute p50 1.591 ms) this is a different runner instance, so it is not a comparable delta.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** shared-runner noise.
+- **reversal criteria:** as B-0003.
