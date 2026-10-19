@@ -225,3 +225,24 @@
 - **rejected:** n/a.
 - **tradeoffs:** see S-0007.
 - **reversal criteria:** any CI failure or unauthorized egress.
+
+## I-0015: CI result for PR #5 (cycle-005-browser-egress)
+- **decision_id:** I-0015
+- **date:** 2026-10-20
+- **problem:** Record the real CI outcome.
+- **options:** n/a (observation).
+- **evidence:**
+  - `gh pr checks 5` gave `test (3.11) pass 46s`, `test (3.12) pass 48s`, `test (3.13) pass 9m10s`. `gh run view 39338745621 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"b8c7a4b2d4ce91afc85d8226436c735a3ec957d0"}`.
+  - All three jobs:
+    - `Ran 153 tests` OK.
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True resolutions=['localhost']`.
+    - `FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0`. That means `RLIMIT_NPROC` is per-userns on the runner kernel too. The kernel version itself was not printed and is UNKNOWN.
+    - `BROWSER_FETCH {"ok": true, "status": 200, "title": "Fixture Page", ...}`.
+    - `SANDBOX_ADVERSARIAL 21/0`, `TOOL_ADVERSARIAL 20/0`, `ORCH_ADVERSARIAL 18/0`, `ADVERSARIAL 20/0`.
+    - `SANDBOX_CI_PROBE=blocked_relaxing_apparmor_userns_restriction` (as I-0012).
+    - The leak step printed `no leaked worker processes`. The string `leaked worker children` in the log is only the echoed script source (log line 451), not output.
+  - 3.13 job: `MUTATION mutants=54 killed=54`.
+- **selected:** the D-0015 success metric is met in CI at `b8c7a4b`.
+- **rejected:** n/a.
+- **tradeoffs:** CI still depends on the AppArmor relaxation (D-0013).
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.

@@ -1,7 +1,7 @@
 {
   "cycle_id": "cycle-005-browser-egress",
-  "head_sha": "UNKNOWN until pushed and verified by CI",
-  "head_sha_note": "Updated after the PR run.",
+  "head_sha": "b8c7a4b2d4ce91afc85d8226436c735a3ec957d0",
+  "head_sha_note": "Last commit verified by CI (run 39338745621). The commit containing this manifest is artifact-only; its own CI run is linked from PR #5.",
   "baseline_sha": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7",
   "branch": "cycle-5/browser-egress",
   "capabilities": [
@@ -130,7 +130,7 @@
     "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
     "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
     "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=54 killed=54 (failfast, ~453 s locally; also 54/54 without failfast)",
-    "ci": "UNKNOWN until PR run completes"
+    "ci": "success: run 39338745621 on b8c7a4b (3.11/3.12/3.13 pass; 'Ran 153 tests'; 'EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 ... audited_attempts=22'; FORK_BOMB contained; 'MUTATION mutants=54 killed=54') (I-0015)"
   },
   "economics": {
     "expected_revenue_usd": 0,
@@ -139,8 +139,8 @@
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
     "latency_cost": "browser fetch via proxy p50 ~41 ms locally vs sandboxed echo ~25-29 ms (B-0009)"
   },
-  "last_updated": "2026-10-19T22:45:00Z",
-  "pull_request": "UNKNOWN (opened after this commit)",
+  "last_updated": "2026-10-19T23:15:00Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/5",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",

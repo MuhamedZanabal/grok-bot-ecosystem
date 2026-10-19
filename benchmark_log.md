@@ -115,3 +115,14 @@
 - **rejected:** gating.
 - **tradeoffs:** the local fixture only; real-site latency is UNKNOWN.
 - **reversal criteria:** browser p50 > 200 ms locally.
+
+## B-0010: Browser fetch on CI
+- **decision_id:** B-0010
+- **date:** 2026-10-20
+- **problem:** Cross-environment record for B-0009.
+- **options:** n/a (observation).
+- **evidence:** run 39338745621 `test (3.13)` gave `BENCH browser_fetch n=30 p50_ms=61.391 p95_ms=79.018` and `tool_execute_subprocess p50_ms=38.988`, so the proxy plus fetch add about 22 ms p50 on the runner. Also `execute p50_ms=1.736`, `agent_run p50_ms=3.595`.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** runner noise.
+- **reversal criteria:** as B-0009.
