@@ -1,0 +1,82 @@
+{
+  "cycle_id": "cycle-001-control-plane",
+  "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
+  "head_sha_note": "Last commit verified by CI (run 39319720689). The commit containing this manifest is artifact-only and cannot embed its own SHA; its CI run is linked from PR #1.",
+  "baseline_sha": "b7fa4c351da1bc89983346ee5ae8f23fbf6b7920",
+  "branch": "cycle-1/control-plane",
+  "baseline_inspection": {
+    "repository": "MuhamedZanabal/grok-bot-ecosystem (private, created 2026-10-19)",
+    "branch": "main",
+    "head": "b7fa4c351da1bc89983346ee5ae8f23fbf6b7920",
+    "files": [
+      ".gitignore",
+      "README.md"
+    ],
+    "architecture": "none (new, empty repository)",
+    "ci": "none (gh run list: empty)",
+    "open_prs": "none (gh pr list --state all: empty)",
+    "dependencies": "none",
+    "security_controls": "none",
+    "branch_protection": "UNKNOWN (not inspected)"
+  },
+  "capabilities": [
+    {
+      "id": "cap.control.policy",
+      "status": "integrated",
+      "evidence": "src/control_plane/policy.py; tests/test_policy.py; python3 -m unittest discover -s tests -t . -> 'Ran 52 tests ... OK'"
+    },
+    {
+      "id": "cap.control.approvals",
+      "status": "integrated",
+      "evidence": "src/control_plane/approvals.py; tests/test_approvals.py + tests/test_adversarial.py (10 token-attack cases blocked)"
+    },
+    {
+      "id": "cap.control.idempotency",
+      "status": "integrated",
+      "evidence": "src/control_plane/ledger.py; tests/test_idempotency.py (replay, restart, conflict, in_doubt, 8-thread duplicate -> 1 execution)"
+    },
+    {
+      "id": "cap.control.loop_governor",
+      "status": "integrated",
+      "evidence": "src/control_plane/governor.py; tests/test_governor.py (iteration/wall/cost -> cycle_aborted, sticky)"
+    },
+    {
+      "id": "cap.control.kill_switch",
+      "status": "integrated",
+      "evidence": "src/control_plane/killswitch.py; tests/test_killswitch.py (all risk levels blocked, cross-process file switch, fail-closed)"
+    },
+    {
+      "id": "cap.control.audit_log",
+      "status": "integrated",
+      "evidence": "src/control_plane/audit.py; tests/test_audit.py (redaction, hash-chain tamper/deletion detection)"
+    },
+    {
+      "id": "cap.control.rate_limit",
+      "status": "integrated",
+      "evidence": "src/control_plane/ratelimit.py; tests/test_failures.py::test_rate_limit"
+    },
+    {
+      "id": "cap.control.persistent_policy_store",
+      "status": "candidate",
+      "evidence": "UNKNOWN: grants are in-memory only in Cycle 1 (remaining gap)"
+    },
+    {
+      "id": "cap.orchestration.agent_runtime",
+      "status": "candidate",
+      "evidence": "roadmap.md Cycle 2; nothing implemented"
+    }
+  ],
+  "verification": {
+    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 52 tests, OK (Python 3.13.5 and 3.11 via uv)",
+    "adversarial": "ADVERSARIAL cases=20 unauthorized_executions=0",
+    "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=10 killed=10",
+    "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
+  },
+  "economics": {
+    "expected_revenue_usd": 0,
+    "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no cost telemetry until Cycle 8)",
+    "measured_cost_usd": "UNKNOWN"
+  },
+  "last_updated": "2026-10-19T20:30:10Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1"
+}
