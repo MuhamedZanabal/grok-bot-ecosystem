@@ -46,10 +46,14 @@ class Harness:
         self.ledger = IdempotencyLedger(self.ledger_path)
         self.kill = KillSwitch(self.kill_path)
         self.governor = LoopGovernor(budget or Budget(100, 3600, 100.0), self.kill, clock=self.mono)
-        self.cp = ControlPlane(policy=self.policy, approvals=self.approvals, ledger=self.ledger,
-                               audit=self.audit, kill_switch=self.kill, governor=self.governor,
-                               rate_limiter=rate, handler_timeout_s=timeout,
-                               allow_inprocess_handlers=inprocess)  # legacy in-process test handlers
+        try:
+            self.cp = ControlPlane(policy=self.policy, approvals=self.approvals, ledger=self.ledger,
+                                   audit=self.audit, kill_switch=self.kill, governor=self.governor,
+                                   rate_limiter=rate, handler_timeout_s=timeout,
+                                   allow_inprocess_handlers=inprocess)  # legacy in-process test handlers
+        except BaseException:
+            self.close()
+            raise
         self.calls: dict[str, int] = {}
         if inprocess:
             for cid in ("cap.fs.read", "cap.fs.write", "cap.email.send", "cap.payment.transfer"):
@@ -106,3 +110,32 @@ def worker(function: str, **kw):
     from tools import WorkerSpec
     kw.setdefault("timeout_s", 5.0)
     return WorkerSpec(TOOL_ROOT, "sample_tools", function, **kw)
+
+
+def host_procs(*argv_prefixes: tuple) -> list[int]:
+    """Host-visible PIDs whose argv starts with one of the given tuples (e.g. ("sleep", "3599"))."""
+    found = []
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/cmdline", "rb") as fh:
+                argv = tuple(a.decode(errors="replace") for a in fh.read().split(b"\0") if a)
+            with open(f"/proc/{d}/stat") as fh:
+                if fh.read().rsplit(")", 1)[-1].split()[0] == "Z":
+                    continue
+        except OSError:
+            continue
+        if any(argv[:len(p)] == p for p in argv_prefixes):
+            found.append(int(d))
+    return found
+
+
+def wait_gone(*argv_prefixes: tuple, timeout: float = 3.0) -> list[int]:
+    import time
+    deadline = time.monotonic() + timeout
+    while True:
+        left = host_procs(*argv_prefixes)
+        if not left or time.monotonic() > deadline:
+            return left
+        time.sleep(0.05)

@@ -7,7 +7,8 @@ Evidence verifies. Every consequential action passes through ControlPlane.execut
 from .approvals import ApprovalAuthority, ApprovalError
 from .audit import AuditLog, redact, verify_chain
 from .canonical import args_sha256, canonical_json
-from .executor import ControlPlane, Outcome, Status
+from .executor import ControlPlane, HostHardeningError, Outcome, Status
+from .hardening import is_non_dumpable, set_non_dumpable
 from .gateway import ActorGateway
 from .grant_store import GrantStore
 from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler
@@ -23,5 +24,5 @@ __all__ = [
     "canonical_json", "ControlPlane", "Outcome", "Status", "Budget", "LoopGovernor",
     "LoopState", "KillSwitch", "IdempotencyLedger", "OpState", "Capability",
     "Decision", "PolicyEngine", "RiskLevel", "RateLimiter", "ActorGateway", "GrantStore",
-    "HandlerFailure", "HandlerTimeout", "IsolatedHandler", "ArgsInvalid", "SchemaError",
+    "HostHardeningError", "is_non_dumpable", "set_non_dumpable", "HandlerFailure", "HandlerTimeout", "IsolatedHandler", "ArgsInvalid", "SchemaError",
 ]

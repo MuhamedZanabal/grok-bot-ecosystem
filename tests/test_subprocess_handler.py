@@ -5,7 +5,7 @@ import tempfile
 import time
 import unittest
 
-from tests.helpers import OPEN_SCHEMA, TOOL_ROOT, Harness, worker
+from tests.helpers import OPEN_SCHEMA, TOOL_ROOT, Harness, wait_gone, worker
 from control_plane import Capability, HandlerTimeout, RiskLevel, Status
 from tools import SubprocessHandler, WorkerError, WorkerSpec
 
@@ -48,7 +48,8 @@ class WorkerIsolationTests(unittest.TestCase):
 
     def test_env_is_allowlist_only_and_canary_absent(self):
         r = self._probe()
-        self.assertEqual(set(r["env"]), {"PATH", "LANG"})
+        self.assertEqual(set(r["env"]) - {"PWD"}, {"PATH", "LANG"})
+        self.assertEqual(r["env"].get("PWD", "/tmp"), "/tmp")  # set by bwrap --chdir
         self.assertNotIn(CANARY_VALUE, json.dumps(r["env"]))
 
     def test_no_parent_file_descriptors_inherited(self):
@@ -66,12 +67,13 @@ class WorkerIsolationTests(unittest.TestCase):
         self.assertNotIn(os.path.join(os.path.dirname(TOOL_ROOT), "..", "..", "src"), r["sys_path"])
         self.assertTrue(r["cwd"].startswith(tempfile.gettempdir()))
 
-    def test_residual_same_uid_proc_environ(self):
-        """Residual gap S-0005: the worker runs as the same OS user. Report, do not hide."""
+    def test_gap_closed_parent_proc_invisible(self):
+        """Was test_residual_same_uid_proc_environ (S-0005). Closed in cycle-004: the worker has
+        its own PID namespace and /proc, so no host process (and no host environ) is visible."""
         r = self._probe()
-        print(f"\nRESIDUAL parent_proc_environ_readable={r['parent_environ_readable']} "
-              f"setenv_canary_visible={r['parent_env_canary_readable']}", file=sys.stderr)
-        self.assertIsInstance(r["parent_environ_readable"], bool)
+        self.assertFalse(r["parent_env_canary_readable"])
+        out = self.h.cp.execute(self.h.req("cap.tool.probe", op="op-probe-0002", args={}))
+        self.assertNotIn(str(os.getpid()), " ".join(out.result["fds"].values()))
 
     def test_tool_module_never_loaded_in_parent(self):
         self._probe()
@@ -86,19 +88,11 @@ class WorkerFailureTests(unittest.TestCase):
         self.assertEqual(self.call("echo", {"a": [1, "b"]}), {"echo": {"a": [1, "b"]}})
 
     def test_timeout_kills_worker_and_its_children(self):
-        with tempfile.TemporaryDirectory() as d:
-            pidfile = os.path.join(d, "pids")
-            t0 = time.monotonic()
-            with self.assertRaises(HandlerTimeout):
-                self.call("sleeper", {"pidfile": pidfile}, timeout_s=1.5)
-            self.assertLess(time.monotonic() - t0, 10)
-            with open(pidfile) as fh:
-                worker_pid, child_pid = map(int, fh.read().split())
-            deadline = time.monotonic() + 3
-            while (alive(worker_pid) or alive(child_pid)) and time.monotonic() < deadline:
-                time.sleep(0.05)
-            self.assertFalse(alive(worker_pid), "worker survived timeout")
-            self.assertFalse(alive(child_pid), "worker's child survived timeout")
+        t0 = time.monotonic()
+        with self.assertRaises(HandlerTimeout):
+            self.call("sleeper", {}, timeout_s=1.5)
+        self.assertLess(time.monotonic() - t0, 10)
+        self.assertEqual(wait_gone(("sleep", "3599")), [], "worker's child survived timeout")
 
     def test_failure_codes_are_stable_and_secret_free(self):
         cases = {"boom": "handler_error:ValueError", "not_json": "handler_result_not_json",
@@ -121,7 +115,8 @@ class WorkerFailureTests(unittest.TestCase):
     def test_cpu_limit_kills_spinner(self):
         with self.assertRaises(WorkerError) as cm:
             self.call("cpu_spin", cpu_s=1, timeout_s=20)
-        self.assertTrue(cm.exception.code.startswith("worker_crashed:rc=-"), cm.exception.code)
+        # killed by RLIMIT_CPU; bwrap reports 128+signal, a bare process reports -signal
+        self.assertRegex(cm.exception.code, r"^worker_crashed:rc=(-\d+|1[3-9]\d)$")
 
     def test_module_outside_tool_root_refused(self):
         with self.assertRaises(WorkerError) as cm:
@@ -161,10 +156,9 @@ class ControlPlaneWorkerIntegrationTests(unittest.TestCase):
         self.h.close()
 
     def test_worker_timeout_is_timed_out_state_and_terminal(self):
-        with tempfile.TemporaryDirectory() as d:
-            req = self.h.req("cap.tool.sleep", args={"pidfile": os.path.join(d, "p")})
-            first = self.h.cp.execute(req)
-            second = self.h.cp.execute(req)
+        req = self.h.req("cap.tool.sleep", args={})
+        first = self.h.cp.execute(req)
+        second = self.h.cp.execute(req)
         self.assertEqual((first.status, first.reason), (Status.TIMED_OUT, "handler_timeout:worker_killed"))
         self.assertEqual(second.status, Status.TIMED_OUT)
 
@@ -185,30 +179,38 @@ if __name__ == "__main__":
 
 
 class HostHardeningTests(unittest.TestCase):
-    def test_non_dumpable_host_hides_environ_from_worker(self):
-        """Run a separate host process (so the test runner is not modified) holding a secret in
-        its *startup* environment; after set_non_dumpable() the worker cannot read it."""
+    def _host(self, code: str) -> dict:
         import subprocess
-        src = os.path.join(os.path.dirname(__file__), "..", "src")
-        script = (
-            "import json,sys; sys.path[:0]=[%r,%r];"
-            "from tools.hardening import set_non_dumpable; from tests.helpers import worker;"
-            "from tools import SubprocessHandler;"
-            "h=sys.argv[1]=='1' and set_non_dumpable();"
-            "r=SubprocessHandler(worker('probe'))({'canary':%r});"
-            "print(json.dumps({'hardened':bool(h),'readable':r['parent_environ_readable'],"
-            "'canary':r['parent_env_canary_readable']}))"
-        ) % (os.path.abspath(src), os.path.abspath(os.path.join(src, "..")), CANARY_VALUE)
-        env = dict(os.environ, HOST_SECRET=CANARY_VALUE)
-        results = {}
-        for flag in ("0", "1"):
-            out = subprocess.run([sys.executable, "-c", script, flag], env=env, capture_output=True,
-                                 text=True, timeout=60)
-            self.assertEqual(out.returncode, 0, out.stderr)
-            results[flag] = json.loads(out.stdout.strip().splitlines()[-1])
-        print(f"\nHARDENING unhardened={results['0']} hardened={results['1']}", file=sys.stderr)
-        if not results["1"]["hardened"]:
-            self.skipTest("prctl(PR_SET_DUMPABLE) unsupported here (UNKNOWN)")
-        self.assertTrue(results["0"]["canary"], "baseline: same-UID worker reads host startup env")
-        self.assertFalse(results["1"]["readable"])
-        self.assertFalse(results["1"]["canary"])
+        src = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+        script = ("import json,sys; sys.path[:0]=[%r,%r];" % (src, os.path.dirname(src))) + code
+        out = subprocess.run([sys.executable, "-c", script], env=dict(os.environ, HOST_SECRET=CANARY_VALUE),
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout.strip().splitlines()[-1])
+
+    def test_gap_closed_sandbox_hides_host_environ_even_if_unhardened(self):
+        """Was the Cycle 3 baseline 'same-UID worker reads host startup env' (canary True).
+        cycle-004: a host that is NOT hardened still leaks nothing, because the sandboxed worker
+        cannot see host processes at all."""
+        r = self._host("from tests.helpers import worker; from tools import SubprocessHandler;"
+                       "from control_plane import is_non_dumpable;"
+                       "r=SubprocessHandler(worker('scan_proc_environ'))({'canary':%r});"
+                       "print(json.dumps(dict(r, host_hardened=is_non_dumpable())))" % CANARY_VALUE)
+        print(f"\nSANDBOX_PROC unhardened_host={r}", file=sys.stderr)
+        self.assertFalse(r["host_hardened"])
+        self.assertFalse(r["ok"], "worker found host secret in some /proc/*/environ")
+        self.assertLessEqual(r["visible_pids"], 3)
+
+    def test_control_plane_construction_enforces_non_dumpable(self):
+        r = self._host("from control_plane import is_non_dumpable; b=is_non_dumpable();"
+                       "from tests.helpers import Harness; h=Harness(inprocess=False);"
+                       "print(json.dumps({'before': b, 'after': is_non_dumpable()})); h.close()")
+        print(f"\nHARDENING control_plane_construction={r}", file=sys.stderr)
+        self.assertEqual(r, {"before": False, "after": True})
+
+    def test_control_plane_refuses_to_start_unhardened(self):
+        from unittest import mock
+        from control_plane import HostHardeningError
+        with mock.patch("control_plane.executor.set_non_dumpable", return_value=False):
+            with self.assertRaises(HostHardeningError):
+                Harness(inprocess=False)

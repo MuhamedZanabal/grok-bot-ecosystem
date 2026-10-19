@@ -1,12 +1,13 @@
 """Adversarial tool-substrate cases. Unauthorized execution = the `mark` tool ran in a worker
-when it should not have. Executions are counted across processes via a marker file.
+when it should not have. Since cycle-004 the worker cannot write to any host path (sandbox), so
+executions are counted host-side: every sandboxed worker spawn (Popen of /worker/worker.py).
 
 Success metric: unauthorized_executions == 0.
 """
-import os
+import subprocess
 import sys
-import tempfile
 import unittest
+from unittest import mock
 
 from tests.helpers import Harness, act, final, make_runner, worker
 from control_plane import RiskLevel, Status
@@ -22,11 +23,19 @@ STRICT = {"type": "object", "required": ["to", "amount"], "additionalProperties"
 
 class ToolAdversarialTests(unittest.TestCase):
     def setUp(self):
-        self.marks = tempfile.TemporaryDirectory()
-        os.environ["TOOL_MARKER_DIR"] = self.marks.name
+        self._spawns = 0
+        real = subprocess.Popen
+
+        def counting(argv, *a, **kw):
+            if "/worker/worker.py" in list(argv):
+                self._spawns += 1
+            return real(argv, *a, **kw)
+        patcher = mock.patch("tools.subprocess_handler.subprocess.Popen", side_effect=counting)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.h = Harness(inprocess=False)
         self.reg = ToolRegistry(self.h.policy, self.h.cp, self.h.audit)
-        mark = worker("mark", env_allow=("TOOL_MARKER_DIR",))
+        mark = worker("mark")
         self.mark = mark
         self.reg.register_local("cap.local.pay", RiskLevel.LOCAL_WRITE, "pay", STRICT, mark, by="zanabal")
         self.reg.register_local("cap.local.ungranted", RiskLevel.READ, "x", {"type": "object"}, mark, by="zanabal")
@@ -40,15 +49,9 @@ class ToolAdversarialTests(unittest.TestCase):
 
     def tearDown(self):
         self.h.close()
-        del os.environ["TOOL_MARKER_DIR"]
-        self.marks.cleanup()
 
     def executions(self) -> int:
-        try:
-            with open(os.path.join(self.marks.name, "marks")) as fh:
-                return len(fh.read().split())
-        except FileNotFoundError:
-            return 0
+        return self._spawns
 
     def _ex(self, cap, args, op):
         return self.h.cp.execute(self.h.req(cap, op=op, args=args))

@@ -35,18 +35,37 @@ MUTANTS=(
   "schema_bool_is_int|control_plane/schema.py|s/\"integer\": isinstance(v, int) and not isinstance(v, bool),/\"integer\": isinstance(v, int),/"
   "schema_unknown_keywords_ok|control_plane/schema.py|s/unknown = set(schema) - KEYWORDS/unknown = set()/"
   "worker_env_inherit|tools/subprocess_handler.py|s/env = dict(BASE_ENV)/env = dict(os.environ)/"
-  "worker_kill_pid_not_group|tools/subprocess_handler.py|s/os.killpg(proc.pid, signal.SIGKILL)/proc.kill()/g"
+  # cycle-004: killpg alone is now an equivalent mutant (the PID namespace tears the tree down
+  # even if only bwrap is killed; see D-0013). Mutate both layers so the test must catch it.
+  "worker_kill_pid_not_group_no_pidns|tools/subprocess_handler.py|s/os.killpg(proc.pid, signal.SIGKILL)/proc.kill()/g"
   "worker_sensitive_env_ok|tools/subprocess_handler.py|s/if SENSITIVE_ENV.search(name):/if False:/"
   "worker_skip_tool_root_check|tools/worker.py|s/if not os.path.realpath(getattr(module, \"__file__\", None) or \"\/\").startswith(root):/if False:/"
   "mcp_default_risk_read|tools/mcp_adapter.py|s/RiskLevel.IRREVERSIBLE, ann_json, error))/RiskLevel.READ, ann_json, error))/"
   "mcp_import_as_accepted|tools/registry.py|s/TrustState.CANDIDATE, f\"annotations=/TrustState.ACCEPTED, f\"annotations=/"
+  # Cycle 4 (cycle-004-isolation)
+  "sandbox_no_netns|tools/sandbox.py|s/\"--unshare-net\", //"
+  "sandbox_no_pidns|tools/sandbox.py|s/\"--unshare-pid\", //"
+  "sandbox_bind_host_root|tools/sandbox.py|s/\"--ro-bind\", \"\/usr\", \"\/usr\"\]/\"--ro-bind\", \"\/\", \"\/\"]/"
+  "sandbox_tool_root_writable|tools/sandbox.py|s/\"--ro-bind\", tool_root,/\"--bind\", tool_root,/"
+  "sandbox_trust_any_bwrap|tools/sandbox.py|s/and st.st_uid == 0$/or True/"
+  "sandbox_probe_ignored|tools/sandbox.py|s/if r.returncode != 0:/if False:/"
+  "host_hardening_optional|control_plane/executor.py|s/if require_host_hardening and not hardened:/if False:/"
+  "host_hardening_not_applied|control_plane/executor.py|s/hardened = set_non_dumpable()/hardened = True/"
+  "registry_not_persisted|tools/registry.py|s/version = self._store.record(/version = 0 and self._store.record(/"
+  "registry_reload_skips_validation|tools/registry.py|s/self._activate(spec, WorkerSpec(\*\*w))/pass/"
 )
-fail=0; killed=0
+fail=0; killed=0; ran=0
+ONLY="${MUTANT_ONLY:-}"  # optional regex for local iteration; CI runs all
 for m in "${MUTANTS[@]}"; do
   IFS='|' read -r name file expr <<<"$m"
+  if [ -n "$ONLY" ] && ! [[ "$name" =~ $ONLY ]]; then continue; fi
+  ran=$((ran+1))
   rm -rf "$WORK/w"; mkdir "$WORK/w"; cp -r "$ROOT/src" "$ROOT/tests" "$WORK/w/"
   target="$WORK/w/src/$file"
   sed -i "$expr" "$target"
+  if [ "$name" = "worker_kill_pid_not_group_no_pidns" ]; then
+    sed -i 's/"--unshare-pid", //' "$WORK/w/src/tools/sandbox.py"
+  fi
   if cmp -s "$target" "$ROOT/src/$file"; then
     echo "$name: NOT_APPLIED"; fail=1; continue
   fi
@@ -56,7 +75,8 @@ for m in "${MUTANTS[@]}"; do
     echo "$name: killed"; killed=$((killed+1))
   fi
   # a mutant that breaks process-group kill leaves the fixture's grandchild alive; reap it
-  pkill -fx "sleep 3599" 2>/dev/null || true
+  for t in 3599 3598 3597 3596; do pkill -fx "sleep $t" 2>/dev/null || true; done
 done
-echo "MUTATION mutants=${#MUTANTS[@]} killed=$killed"
+echo "MUTATION mutants=$ran killed=$killed${ONLY:+ (filtered: $ONLY)}"
+[ -z "$ONLY" ] && [ "$ran" -ne "${#MUTANTS[@]}" ] && fail=1
 exit $fail

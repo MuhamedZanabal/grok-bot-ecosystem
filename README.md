@@ -54,8 +54,7 @@ deterministic `MockProvider` ships; no real model API is called.
   - CPU, address-space and no-core rlimits;
   - a wall-clock deadline after which the whole process group is SIGKILLed.
 
-  Call `tools.hardening.set_non_dumpable()` at host startup so same-UID workers cannot read the
-  host's `/proc/<pid>/environ`.
+  Since cycle-004 every worker runs inside a bubblewrap sandbox (see below).
 - **Argument schemas.** Every bound capability declares a JSON-Schema-subset `args_schema`,
   enforced before execution. It is stricter than JSON Schema: missing `additionalProperties`
   means false, `pattern` is a full match, and unknown keywords are rejected.
@@ -65,12 +64,32 @@ deterministic `MockProvider` ships; no real model API is called.
   `accept()` (operator, explicit risk, worker, reason) makes a candidate executable; a grant is
   still required. There is no MCP transport (no network).
 
+## cycle-004-isolation: OS worker sandbox (`src/tools/sandbox.py`, Linux + bubblewrap)
+
+- **Sandbox.** Every `SubprocessHandler` call runs `bwrap` with fresh user, PID, network,
+  IPC, UTS (and, if available, cgroup) namespaces; `--cap-drop ALL`, `--new-session`,
+  `--die-with-parent`, `--clearenv`. The filesystem is read-only: `/usr` (plus merged-usr
+  symlinks), the Python installation, `/worker/worker.py` and the tool root at `/tool`, with a
+  private tmpfs at `/tmp`. There is no network (not even the host loopback), no host `/proc`,
+  and no parent state files. The PID namespace kills `setsid`/double-forked descendants.
+- **Fail closed.** If `/usr/bin/bwrap` is missing, not root-owned, writable by others, or its
+  probe fails, `SandboxUnavailable` is raised and no tool runs. There is no fallback.
+  Requires `bubblewrap` and unprivileged user namespaces (`apt-get install bubblewrap`; on
+  Ubuntu 24.04 AppArmor may need `kernel.apparmor_restrict_unprivileged_userns=0`; see D-0013).
+- **Enforced host hardening.** `ControlPlane()` sets `PR_SET_DUMPABLE=0` and raises
+  `HostHardeningError` if that fails (`require_host_hardening=False` is an explicit, audited
+  opt-out).
+- **Persistent registry.** `ToolRegistry(..., store=RegistryStore("registry.sqlite"))` versions
+  every trust change (`tool_events`). After a restart it re-binds accepted tools from their
+  stored, re-validated `WorkerSpec`; candidates stay inert.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
 python3 bench/bench_control_plane.py 200           # execute() overhead
 python3 bench/bench_orchestrator.py 100            # agent run overhead (mock provider)
-python3 bench/bench_tools.py 50                    # out-of-process tool call overhead
+python3 bench/bench_tools.py 50                    # sandboxed tool call overhead
+MUTANT_ONLY='sandbox' bash scripts/mutation_check.sh  # local iteration on a subset
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl
 ```

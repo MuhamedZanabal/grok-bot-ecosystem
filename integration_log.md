@@ -130,3 +130,59 @@
 - **rejected:** n/a.
 - **tradeoffs:** this artifact-only follow-up commit gets its own run on PR #3.
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0010: PR #3 (Cycle 3) merged
+- **decision_id:** I-0010
+- **date:** 2026-10-20
+- **problem:** Merge Cycle 3 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - Before merging, `gh pr checks 3` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39325609307 on head `a4554490`).
+  - Merged with a merge commit pinned to head SHA `a4554490f7cd61d7580715bdf7a68b4847cb2e1b`.
+  - `gh pr view 3 --json state,mergeCommit,headRefOid,mergedAt` gave `MERGED`, `mergeCommit 12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e`, `mergedAt 2026-10-19T21:18:14Z` (2026-10-20 00:18 UTC+3).
+- **selected:** main = `12f0b7f`, the baseline for cycle-004-isolation.
+- **rejected:** n/a.
+- **tradeoffs:** branch protection is still unavailable (S-0004), so the check was procedural.
+- **reversal criteria:** n/a.
+
+## I-0011: cycle-004-isolation integrated on branch `cycle-4/isolation`
+- **decision_id:** I-0011
+- **date:** 2026-10-20
+- **problem:** Integrate D-0012 scope (a)-(d).
+- **options:** see D-0013, D-0014, R-0009.
+- **evidence:**
+  - Added `src/tools/sandbox.py` (130 lines) and `src/tools/registry_store.py` (80 lines). `src/tools/hardening.py` moved to `src/control_plane/hardening.py`, with a re-export left behind. Edited `executor.py`, `registry.py`, `subprocess_handler.py` and `__init__`s. Production diff is about 310 lines, within the ≤600 budget.
+  - Local results:
+    - 3.13.5, 3.11 (uv) and 3.12 (uv): `Ran 146 tests ... OK`.
+    - `ADVERSARIAL cases=20 unauthorized_executions=0`; `ORCH_ADVERSARIAL cases=18 unauthorized_executions=0`; `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; `SANDBOX_ADVERSARIAL cases=21 escapes=0`.
+    - `pgrep -fx "sleep 35(99|98|97|96)"` after the handler and sandbox suites gave none (`no-leaks`).
+    - `bash scripts/mutation_check.sh` gave `MUTATION mutants=42 killed=42` (exit 0); afterwards `pgrep -fa "sleep 35"` gave none.
+  - Pinned gap tests flipped:
+    - `test_residual_same_uid_proc_environ` → `test_gap_closed_parent_proc_invisible`.
+    - The Cycle 3 unhardened baseline (`canary: True`) → `test_gap_closed_sandbox_hides_host_environ_even_if_unhardened` (`SANDBOX_PROC unhardened_host={'ok': False, 'visible_pids': 2, 'host_hardened': False}`).
+    - Timeout tests now verify host-side that `sleep 3599` is gone.
+    - `test_residual_trusted_inprocess_code_can_invoke_launchers` stays pinned (S-0006 gap).
+  - `tests/test_tool_adversarial.py` now counts executions host-side (Popen of `/worker/worker.py`), because the sandboxed tool can no longer write a host marker file. That is itself evidence of scope (a).
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** see D-0013 and D-0014.
+- **reversal criteria:** any CI failure, or any escape.
+- **CI result:** appended as I-0012 once the PR run finishes.
+
+## I-0012: CI result for PR #4 (cycle-004-isolation)
+- **decision_id:** I-0012
+- **date:** 2026-10-20
+- **problem:** Record the real CI outcome, including the previously UNKNOWN runner sandbox support.
+- **options:** n/a (observation).
+- **evidence:**
+  - `gh pr checks 4` gave `test (3.11) pass 35s`, `test (3.12) pass 35s`, `test (3.13) pass 7m34s`. `gh run view 39329642600 --json headSha,conclusion` gave `{"conclusion":"success","headSha":"f0749ca0cd76068d5fc052f165636c919486b90f"}`.
+  - **Runner sandbox facts (formerly UNKNOWN):**
+    - bubblewrap is not preinstalled; apt installed `bubblewrap 0.9.0`.
+    - `kernel.apparmor_restrict_unprivileged_userns = 1` by default, and the bwrap probe was blocked, giving `SANDBOX_CI_PROBE=blocked_relaxing_apparmor_userns_restriction`.
+    - After the CI-only `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` the probe passed, and `SANDBOX Sandbox(bwrap='/usr/bin/bwrap', python='/opt/hostedtoolcache/Python/3.1x.y/x64/bin/python3.1x')` was detected on all three jobs.
+  - All three jobs: `Ran 146 tests` OK, no skips; `ADVERSARIAL cases=20 unauthorized_executions=0`; `ORCH_ADVERSARIAL cases=18 unauthorized_executions=0`; `TOOL_ADVERSARIAL cases=20 unauthorized_executions=0`; `SANDBOX_ADVERSARIAL cases=21 escapes=0`; `SANDBOX_PROC unhardened_host={'ok': False, 'visible_pids': 2, 'host_hardened': False}`; `HARDENING control_plane_construction={'before': False, 'after': True}`; `no leaked worker processes`.
+  - 3.13 job: `MUTATION mutants=42 killed=42`.
+- **selected:** the D-0012 success metric is met in CI at `f0749ca`.
+- **rejected:** n/a.
+- **tradeoffs:** CI passes only with the AppArmor userns restriction relaxed (D-0013). Default Ubuntu 24.04 hosts would fail closed until configured.
+- **reversal criteria:** any later CI failure on this branch reopens the cycle.

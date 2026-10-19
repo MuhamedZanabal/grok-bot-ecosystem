@@ -46,3 +46,33 @@
 - **rejected:** reordering now. Cycle 4 has no credentials in scope yet.
 - **tradeoffs:** filesystem reach by tools remains until Cycle 9.
 - **reversal criteria:** any cycle that gives tools access to real credentials or external accounts must first close S-0005 gaps 1-2.
+
+## RM-0004: Renumbered roadmap (security sub-cycle inserted)
+- **decision_id:** RM-0004
+- **date:** 2026-10-20
+- **problem:** Insert the isolation sub-cycle per D-0012 and renumber honestly.
+- **options:** keep the numbers and use a "3b" label, or renumber.
+- **evidence:** D-0012.
+- **selected:** renumber. Done: cycle-001 control plane, cycle-002 orchestration, cycle-003 tool substrate. Then:
+  - **cycle-004-isolation (this):** OS sandbox for workers, enforced host hardening, persisted registry trust, descendant kill.
+  - **cycle-005:** browser/computer-use substrate (formerly Cycle 4).
+  - **cycle-006:** memory/knowledge (formerly 5).
+  - **cycle-007:** research + evidence engine (formerly 6).
+  - **cycle-008:** workflow/scheduling (formerly 7).
+  - **cycle-009:** observability + cost accounting (formerly 8).
+  - **cycle-010:** remaining security hardening: key custody/rotation, audit anchoring, tool-output content filtering, grant-store auth (formerly 9, minus what cycle-004 pulled forward).
+  - **cycle-011+:** autonomous revenue generation (formerly 10+), gated as before.
+- **rejected:** a "3b" label, which hides the reorder.
+- **tradeoffs:** older log entries refer to the old numbers ("Cycle 7", "Cycle 8", "Cycle 9"). They are append-only and left as written. This entry is the mapping.
+- **reversal criteria:** none.
+
+## RM-0005: After cycle-004-isolation
+- **decision_id:** RM-0005
+- **date:** 2026-10-20
+- **problem:** Choose the next target.
+- **options:** cycle-005 browser/computer-use (as RM-0004), or more hardening first.
+- **evidence:** S-0006 closed RM-0003's precondition (S-0005 gaps 1-2). Remaining gaps 1, 4 and 7 are relevant to credential handling.
+- **selected:** cycle-005 browser/computer-use. Its driver runs inside the sandbox; any network access it needs must be an explicit, narrow, audited egress design, never a default. The cycle must add `RLIMIT_NPROC` or a cgroup pids limit before it handles credentials, and must not store credentials in any SQLite store reachable by same-UID host processes without cycle-010 signing (otherwise it records an UNKNOWN or gap).
+- **rejected:** further hardening first, which would push value further out. Gaps are tracked.
+- **tradeoffs:** seccomp is still absent.
+- **reversal criteria:** the CI or production probe shows bwrap blocked on target hosts → do D-0013's reversal path first.
