@@ -94,8 +94,12 @@
     },
     {
       "id": "cap.memory.knowledge",
-      "description": "Memory/knowledge substrate (Cycle 5)",
-      "implementations": [],
+      "description": "Provenance-tagged, HMAC-chained, budgeted, redacting memory behind the control plane; contents are untrusted data (cycle-006)",
+      "implementations": [
+        "src/memory/store.py",
+        "src/memory/handlers.py",
+        "src/memory/ingest.py"
+      ],
       "expected_value": 0.5
     },
     {
@@ -332,6 +336,21 @@
       "from": "cap.security.credential_broker",
       "to": "cap.tools.egress",
       "type": "depends_on"
+    },
+    {
+      "from": "cap.memory.knowledge",
+      "to": "cap.control.policy",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.memory.knowledge",
+      "to": "cap.control.audit_log",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.memory.knowledge",
+      "to": "cap.computer.browser",
+      "type": "ingests_from"
     }
   ]
 }

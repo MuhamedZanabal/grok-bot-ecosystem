@@ -100,6 +100,20 @@ deterministic `MockProvider` ships; no real model API is called.
   a stdlib GET with title, text and link extraction. Every redirect hop goes through the
   proxy. TLS is verified. No cookies, credentials or JavaScript. Page content is untrusted data.
 
+## cycle-006-memory: provenance-tagged memory (`src/memory/`)
+
+- `MemoryStore(path, key)` (SQLite, FTS5 when available, otherwise LIKE). Every record carries
+  `source_id`, the exact `origin_url`, `source_ref`, `trust` (`untrusted` by default),
+  `content_sha256`, `created_at`/`expires_at`, and an HMAC chain (`prev_mac`, `mac`).
+- Secrets are redacted before hashing. A URL containing a secret is refused. Dedup is by
+  content hash. There are size, count and TTL budgets. Hash and MAC are verified on every
+  read; tampered rows are excluded and audited.
+- `register_memory(policy, cp, store, audit)` binds `cap.memory.write` (risk 1, idempotent)
+  and `cap.memory.search` (risk 0) as `TrustedHostHandler`s. Results come back as
+  `{"type": "untrusted_data", "provenance": {...}, "content": ...}`.
+- `memory.ingest_fetch(cp, actor, fetch_op_id, fetch_result)` stores `cap.browser.fetch`
+  results as untrusted records through the control plane.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
@@ -107,6 +121,7 @@ python3 bench/bench_control_plane.py 200           # execute() overhead
 python3 bench/bench_orchestrator.py 100            # agent run overhead (mock provider)
 python3 bench/bench_tools.py 50                    # sandboxed tool call overhead
 python3 bench/bench_browser.py 30                  # browser fetch via egress proxy (local fixture)
+python3 bench/bench_memory.py 200                  # memory write/search via the control plane
 MUTANT_ONLY='sandbox' bash scripts/mutation_check.sh  # local iteration on a subset
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl

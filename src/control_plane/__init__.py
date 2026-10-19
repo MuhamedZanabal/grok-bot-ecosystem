@@ -11,7 +11,7 @@ from .executor import ControlPlane, HostHardeningError, Outcome, Status
 from .hardening import is_non_dumpable, set_non_dumpable
 from .gateway import ActorGateway
 from .grant_store import GrantStore
-from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler
+from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler, TrustedHostHandler
 from .schema import ArgsInvalid, SchemaError
 from .governor import Budget, LoopGovernor, LoopState
 from .killswitch import KillSwitch
@@ -24,5 +24,5 @@ __all__ = [
     "canonical_json", "ControlPlane", "Outcome", "Status", "Budget", "LoopGovernor",
     "LoopState", "KillSwitch", "IdempotencyLedger", "OpState", "Capability",
     "Decision", "PolicyEngine", "RiskLevel", "RateLimiter", "ActorGateway", "GrantStore",
-    "HostHardeningError", "is_non_dumpable", "set_non_dumpable", "HandlerFailure", "HandlerTimeout", "IsolatedHandler", "ArgsInvalid", "SchemaError",
+    "HostHardeningError", "is_non_dumpable", "set_non_dumpable", "HandlerFailure", "HandlerTimeout", "IsolatedHandler", "TrustedHostHandler", "ArgsInvalid", "SchemaError",
 ]

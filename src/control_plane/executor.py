@@ -16,7 +16,7 @@ from .approvals import ApprovalAuthority, ApprovalError
 from .audit import AuditLog
 from .gateway import ActorGateway
 from .hardening import set_non_dumpable
-from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler
+from .handlers import HandlerFailure, HandlerTimeout, IsolatedHandler, TrustedHostHandler
 from .canonical import CanonicalizationError, args_sha256, canonical_json
 from .governor import LoopGovernor, LoopState
 from .killswitch import KillSwitch
@@ -86,7 +86,8 @@ class ControlPlane:
         if cap.schema_json is None:
             raise ValueError(f"capability {capability_id} has no args_schema; refusing to bind")
         isolated = isinstance(handler, IsolatedHandler)
-        if not isolated and not self._allow_inprocess:
+        trusted_host = isinstance(handler, TrustedHostHandler)
+        if not (isolated or trusted_host) and not self._allow_inprocess:
             raise ValueError("in-process handlers are disabled; bind an IsolatedHandler")
         self._handlers[capability_id] = handler
         self.audit.append("handler_bound", capability=capability_id, isolated=isolated,

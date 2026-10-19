@@ -260,3 +260,21 @@
 - **rejected:** n/a.
 - **tradeoffs:** no branch protection (S-0004).
 - **reversal criteria:** n/a.
+
+## I-0017: cycle-006-memory integrated on branch `cycle-6/memory`
+- **decision_id:** I-0017
+- **date:** 2026-10-20
+- **problem:** Integrate D-0018 scope.
+- **options:** D-0018, D-0019, R-0013.
+- **evidence:**
+  - **New code:** `src/memory/{store,handlers,ingest,__init__}.py` (386 lines). `control_plane` gains `TrustedHostHandler`, `audit.redact_text` and `contains_secret` (+27 lines). About 413 production lines, within the ≤600 budget. Stdlib only.
+  - **Tests:** `python3 -m unittest discover -s tests -t .` gave `Ran 161 tests ... OK` on 3.13.5, uv 3.11 and uv 3.12; `MEMORY_SEARCH_MODE=fts5`.
+  - **Memory adversarial output:** `MEMORY_ADVERSARIAL cases=15 violations=0`; `POISONED_MEMORY ... dangerous_executions=0 trusted_records=0 state=completed`.
+  - **Browser wiring:** `MEMORY_FROM_FETCH {"origin_url": "http://127.0.0.1:<port>/page?q=fox&n=2", "source_id": "cap.browser.fetch", "source_ref": "op-fetch-mem-01", ...}`; re-ingesting gives `replayed`.
+  - **Prior sets:** 20/0, 18/0, 20/0, 21/0 and 26/0 are unchanged.
+  - **Mutation:** `bash scripts/mutation_check.sh` gave `MUTATION mutants=68 killed=68`, `exit=0`, `elapsed=620s`.
+  - **Cleanup:** `pgrep -fa "worker.py|sleep 35|mutation_check"` gave none.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** S-0008.
+- **reversal criteria:** any CI failure or violation.

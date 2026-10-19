@@ -398,3 +398,18 @@
 - **reversal criteria:**
   - FTS5 is missing on CI → LIKE fallback, recorded.
   - The memory handler needs to run model- or tool-supplied code → it must move into a worker instead.
+
+## D-0019: Implementation choices made during cycle-006
+- **decision_id:** D-0019
+- **date:** 2026-10-20
+- **problem:** Details not fixed by D-0018.
+- **options / evidence:**
+  - **Oversized writes are refused twice.** A 64 KiB+1 write through `cap.memory.write` gives `rejected args_too_large` (the control plane's existing request-size limit, before the handler). A direct `MemoryStore.put` of 64 KiB+1 gives `record_too_large`. The schema's `maxLength` (262144) is a looser outer bound.
+  - **Dedup scope.** Dedup applies among *live* records (a partial unique index `WHERE purged = 0`). After expiry the same content may be stored again with fresh provenance. A dedup hit returns the first record's id and provenance, and is still audited (`memory_write deduplicated=true`).
+  - **Trust.** The capability handler hard-codes `trust="untrusted"`; only direct operator API calls (`MemoryStore.put(trust="operator")`) can set anything else. A `trust` argument is rejected by the schema (`additionalProperties: false`). `source_id="operator"` is just a label and confers nothing (`_trust_args` case).
+  - **FTS5 query handling.** Free text is reduced to at most 10 quoted alphanumeric terms, so FTS5 operators and quotes cannot be injected (`_fts_injection`: 7 hostile queries, all `executed`, table intact).
+  - **Tamper reporting.** Rows failing verification are excluded from results and audited as `memory_tamper_detected` with `record_id` and `reason` (`mac_mismatch`, `content_hash_mismatch`, `bad_trust`).
+- **selected:** as above.
+- **rejected:** silently truncating oversized content (it would change the content hash and meaning without notice).
+- **tradeoffs:** a dedup hit hides the second origin URL (it is still in the audit log via the decision's args hash, but not in the record).
+- **reversal criteria:** a research cycle needs multi-provenance records → add a `sightings` table keyed by `content_sha256`.

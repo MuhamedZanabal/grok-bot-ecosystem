@@ -107,3 +107,14 @@
 - **rejected:** the JS tier now (no in-scope need).
 - **tradeoffs:** none.
 - **reversal criteria:** a capability needs JS rendering.
+
+## RM-0008: After cycle-006
+- **decision_id:** RM-0008
+- **date:** 2026-10-20
+- **problem:** Next target.
+- **options:** cycle-007 research and evidence engine (per RM-0004).
+- **evidence:** memory now holds provenance-tagged untrusted records (S-0008); research needs claims that cite record ids and origin URLs.
+- **selected:** cycle-007 research and evidence engine. Claims must cite `record_id` and `content_sha256`, and a claim without a verifiable citation is UNKNOWN. Also add an automated audit-anchor cross-check for memory (S-0008 gaps 2-3) and per-actor memory namespaces if more than one actor is granted.
+- **rejected:** none.
+- **tradeoffs:** none.
+- **reversal criteria:** none.
