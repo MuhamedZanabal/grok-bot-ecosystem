@@ -59,14 +59,18 @@
     },
     {
       "id": "cap.control.persistent_policy_store",
-      "description": "Durable, versioned grants/capability registry (gap)",
-      "implementations": [],
+      "description": "Durable, versioned grants with audited grant/revoke events and risk-at-grant binding",
+      "implementations": [
+        "src/control_plane/grant_store.py"
+      ],
       "expected_value": 0.6
     },
     {
       "id": "cap.orchestration.agent_runtime",
-      "description": "Model-neutral agent loop that proposes actions to the control plane (Cycle 2)",
-      "implementations": [],
+      "description": "Bounded, model-neutral agent loop; typed proposals only, via ActorGateway; deterministic terminal states",
+      "implementations": [
+        "src/orchestrator/runner.py"
+      ],
       "expected_value": 0.8
     },
     {
@@ -116,6 +120,36 @@
       "description": "Autonomous revenue workflows; gated on cycles 1-9 controls (Cycle 10+)",
       "implementations": [],
       "expected_value": 0.4
+    },
+    {
+      "id": "cap.control.gateway",
+      "description": "Actor-bound, data-only gateway onto ControlPlane.execute; the only object an agent runtime holds",
+      "implementations": [
+        "src/control_plane/gateway.py"
+      ],
+      "expected_value": 0.8
+    },
+    {
+      "id": "cap.orchestration.provider_interface",
+      "description": "Provider-neutral str->str model interface + deterministic MockProvider",
+      "implementations": [
+        "src/orchestrator/provider.py"
+      ],
+      "expected_value": 0.7
+    },
+    {
+      "id": "cap.orchestration.proposal_parser",
+      "description": "Strict parser from untrusted model text to typed proposals",
+      "implementations": [
+        "src/orchestrator/proposal.py"
+      ],
+      "expected_value": 0.75
+    },
+    {
+      "id": "cap.tools.handler_isolation",
+      "description": "Out-of-process handler execution so in-process introspection cannot reach handlers (gap S-0003)",
+      "implementations": [],
+      "expected_value": 0.75
     }
   ],
   "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -138,6 +172,31 @@
     {
       "from": "cap.revenue.workflows",
       "to": "cap.security.hardening",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.orchestration.agent_runtime",
+      "to": "cap.control.gateway",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.orchestration.agent_runtime",
+      "to": "cap.orchestration.proposal_parser",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.orchestration.agent_runtime",
+      "to": "cap.orchestration.provider_interface",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.control.policy",
+      "to": "cap.control.persistent_policy_store",
+      "type": "depends_on"
+    },
+    {
+      "from": "cap.tools.typed_mcp",
+      "to": "cap.tools.handler_isolation",
       "type": "depends_on"
     }
   ]

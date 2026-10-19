@@ -27,11 +27,13 @@ jobs:
         run: python -m compileall -q src tests bench
       - name: Validate artifacts are well-formed JSON
         run: python -c "import json; [json.load(open(f)) for f in ('ecosystem_manifest.json','capability_graph.json')]"
-      - name: Policy invariant + adversarial tests
+      - name: Policy invariant, orchestration + adversarial tests
         run: python -m unittest discover -s tests -t . -v
       - name: Mutation check (each disabled guard must fail the suite)
         if: matrix.python == '3.13'
         run: bash scripts/mutation_check.sh
       - name: Overhead benchmark (informational)
         if: matrix.python == '3.13'
-        run: python bench/bench_control_plane.py 200
+        run: |
+          python bench/bench_control_plane.py 200
+          python bench/bench_orchestrator.py 100

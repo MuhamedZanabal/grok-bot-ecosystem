@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping
 
 from .approvals import ApprovalAuthority, ApprovalError
 from .audit import AuditLog
+from .gateway import ActorGateway
 from .canonical import CanonicalizationError, args_sha256, canonical_json
 from .governor import LoopGovernor, LoopState
 from .killswitch import KillSwitch
@@ -70,6 +71,10 @@ class ControlPlane:
             raise ValueError(f"cannot bind handler to unregistered capability {capability_id}")
         self._handlers[capability_id] = handler
 
+    def gateway(self, actor: str) -> ActorGateway:
+        """Hand an agent runtime this, never the ControlPlane or a handler."""
+        return ActorGateway(actor, self.execute, self.policy.granted)
+
     # ------------------------------------------------------------------ helpers
     def _out(self, status: Status, op: str | None, reason: str = "", result: Any = None,
              **extra: Any) -> Outcome:
@@ -117,6 +122,8 @@ class ControlPlane:
             return self._out(Status.KILLED, op, "kill_switch_engaged", **ctx)
 
         decision = self.policy.evaluate(actor, cap)
+        if decision.policy_version is not None:
+            ctx["policy_version"] = decision.policy_version
         if not decision.allowed:
             return self._out(Status.DENIED, op, decision.reason, **ctx)
         handler = self._handlers.get(cap)

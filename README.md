@@ -24,10 +24,29 @@ Every decision is appended to a hash-chained JSONL audit log with secret redacti
 
 Risk levels: 0 read, 1 reversible local write, 2 external/consequential, 3 financial/irreversible.
 
+Grants are persistent and versioned (`grant_store.py`, SQLite). Every grant/revoke is an
+immutable event with a monotonically increasing version and an audit record. A grant made
+at one risk level does not cover the same capability re-registered at another.
+
+## Cycle 2: orchestration (`src/orchestrator/`)
+
+Models are untrusted text generators behind `ModelProvider.complete(request_json: str) -> str`.
+The runner parses each output with a strict parser into a typed `ActionProposal` or
+`FinalProposal` and submits actions through an actor-bound `ActorGateway`
+(`ControlPlane.gateway(actor)`), never the control plane or a handler. Operation ids are derived
+from `(run_id, capability, args, idempotency_key)`, so duplicate proposals replay instead of
+re-executing, and a run can resume after approval by re-running with the same `run_id`.
+
+Terminal run states: `completed`, `awaiting_approval`, `cycle_aborted`, `killed`,
+`provider_failed`, `malformed_output`, `blocked_limit`, `in_doubt`.
+Providers are tried in order with bounded attempts and per-call timeouts. Only the
+deterministic `MockProvider` ships; no real model API is called.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
 python3 bench/bench_control_plane.py 200           # execute() overhead
+python3 bench/bench_orchestrator.py 100            # agent run overhead (mock provider)
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl
 ```
