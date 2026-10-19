@@ -129,3 +129,36 @@
 - **rejected:** (a) not a real boundary; (c) needs privileges and infrastructure not available or verified in CI (UNKNOWN), deferred to Cycle 9; (d) third-party code and network transport are out of scope, deferred (R-0006).
 - **tradeoffs:** process spawn per call costs latency; there are no warm workers. Schema subset semantics are deliberately stricter than JSON Schema (missing `additionalProperties` means false; `pattern` uses full match; unknown keywords are rejected).
 - **reversal criteria:** spawn latency dominates real workloads (> 50 ms p50 overhead) leads to a pooled worker with per-call reset. A need for real isolation from same-UID processes leads to uid/namespace/seccomp sandboxing in Cycle 9.
+
+## D-0009: One worker process per call, launched with `python -I -S`
+- **decision_id:** D-0009
+- **date:** 2026-10-19
+- **problem:** How to run tool code out of process.
+- **options:** (a) a fresh process per call; (b) a pooled warm worker; (c) `multiprocessing` (fork).
+- **evidence:** `src/tools/subprocess_handler.py`; `tests/test_subprocess_handler.py::WorkerIsolationTests` (env = `{PATH, LANG}`, no parent ledger/audit/grant fds, `importable=[]`, `loaded=[]`, `gc_hits=0`); `test_timeout_kills_worker_and_its_children`. Cost: `python3 bench/bench_tools.py 50` gave `p50_ms=24.810` against in-process `execute p50_ms=0.719` (B-0005).
+- **selected:** (a). `-I -S` (isolated mode, no site), `start_new_session`, `close_fds`, empty temp cwd, allowlisted env, rlimits set inside the worker, and SIGKILL of the whole process group on deadline. The worker only imports modules physically under `tool_root`.
+- **rejected:** (b) state leaks between calls and needs a reset protocol, so it is deferred until latency matters; (c) fork copies the parent's memory (secrets, objects) into the tool process, which defeats the purpose.
+- **tradeoffs:** about 24 ms per call. A grandchild that calls `setsid()` escapes the process-group kill (S-0005).
+- **reversal criteria:** p50 spawn overhead becomes significant relative to real tool latency in Cycle 4+ workloads, leading to a pool with fresh-process-per-tenant semantics.
+
+## D-0010: Strict default `ControlPlane(allow_inprocess_handlers=False)`; schemas required to bind
+- **decision_id:** D-0010
+- **date:** 2026-10-19
+- **problem:** Make isolation and validation the default, not an option.
+- **options:** opt-in isolation, or opt-out (explicit flag for in-process).
+- **evidence:** `src/control_plane/executor.py::bind` refuses non-`IsolatedHandler`s unless the flag is set, and refuses any capability without `args_schema`. `tests/test_schema.py::test_default_control_plane_is_strict`; mutants `inprocess_allowed_by_default` and `skip_schema_enforcement` are killed. Every bind is audited with `isolated: true/false`.
+- **selected:** opt-out. Legacy Cycle 1/2 tests use in-process counters via an explicit `Harness(inprocess=True)`, which sets the flag.
+- **rejected:** opt-in, which contradicts default-deny.
+- **tradeoffs:** callers must write a schema for every capability.
+- **reversal criteria:** none expected.
+
+## D-0011: MCP tools enter as candidates at risk 3; annotations never lower risk
+- **decision_id:** D-0011
+- **date:** 2026-10-19
+- **problem:** External tool definitions are untrusted (names, schemas, descriptions and hints).
+- **options:** (a) trust annotations (`readOnlyHint`) to set risk; (b) import as executable at a default risk; (c) import as non-executable candidates proposed at risk 3, which an operator must accept with an explicit risk, worker and reason.
+- **evidence:** `src/tools/registry.py`, `src/tools/mcp_adapter.py`; `tests/test_tool_registry.py`; `tests/test_tool_adversarial.py` (`mcp readOnlyHint downgrade` gives `approval_required`; `mcp candidate execute`/`grant` are refused). Mutants `mcp_default_risk_read` and `mcp_import_as_accepted` are killed.
+- **selected:** (c). Candidates are not registered with policy, so they cannot be granted, bound or executed.
+- **rejected:** (a), because a malicious server controls the hints; (b), which skips human review.
+- **tradeoffs:** every MCP tool needs an operator decision. Registry trust state is in memory (only the audit trail persists).
+- **reversal criteria:** a signed/attested server allowlist (Cycle 9) could justify pre-accepting tools from specific servers.
