@@ -330,3 +330,22 @@
 - **rejected:** passing credentials through tool args, env or model context.
 - **tradeoffs:** logged-in browsing is impossible until it is implemented.
 - **reversal criteria:** n/a.
+
+## D-0017: Implementation choices made during cycle-005
+- **decision_id:** D-0017
+- **date:** 2026-10-20
+- **problem:** Details not fixed by D-0015.
+- **options / evidence:**
+  - **TLS roots:**
+    - The uv-built 3.11 and 3.12 interpreters use a bundled OpenSSL (`OpenSSL 3.5.9`, `cafile=None`, `capath=/etc/ssl/certs`). With that, `cert_store_stats()['x509_ca']` was 0 inside the sandbox (`test_worker_has_system_ca_roots_when_egress_enabled` FAILED on 3.11/3.12 via uv; it passed on Debian's 3.13).
+    - Fix: `browser.tls_context()` falls back to the system bundle (`/etc/ssl/certs/ca-certificates.crt`, …). `/etc/ssl` is bind-mounted read-only only into sandboxes that have egress.
+    - After the fix the test passed on 3.13 and 3.11. Verification stays on: `test_tls_certificate_is_verified` gave `tls_verify_failed` for a self-signed fixture.
+  - **Proxy shutdown latency:**
+    - The first version polled `accept()` every 0.1 s, giving `BENCH browser_fetch n=30 p50_ms=136.731`.
+    - Replaced with a wake pipe in every `select()`, giving `p50_ms=40.942` (same box, same session).
+  - **Fork-bomb safety:** the test launches the unbounded bomb only after the bounded `fork_count` probe shows the limit works. That keeps the `nproc_limit_removed` mutant from running a real fork bomb on the CI host.
+  - **CI timeout:** 25 → 45 min. There are now 54 mutants, each running the full suite (about 17 s locally); the 3.13 job took 7m34s with 42 mutants on cycle-004.
+- **selected:** as above.
+- **rejected:** a sleep-based proxy shutdown; trusting interpreter-default CA paths.
+- **tradeoffs:** `/etc/ssl` (public CA material only) is visible to egress-enabled workers.
+- **reversal criteria:** CI 3.13 job > 40 min → parallelise the mutation check.

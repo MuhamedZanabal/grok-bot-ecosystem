@@ -53,6 +53,19 @@ MUTANTS=(
   "host_hardening_not_applied|control_plane/executor.py|s/hardened = set_non_dumpable()/hardened = True/"
   "registry_not_persisted|tools/registry.py|s/version = self._store.record(/version = 0 and self._store.record(/"
   "registry_reload_skips_validation|tools/registry.py|s/self._activate(spec, WorkerSpec(\*\*w))/pass/"
+  # Cycle 5 (cycle-005-browser-egress)
+  "egress_skip_allowlist|tools/egress.py|s/if target not in self._allow:/if False:/"
+  "egress_resolve_before_allowlist|tools/egress.py|s/if target not in self._allow:/if (_resolve(host, port) and False) or target not in self._allow:/"
+  "egress_skip_rebinding_guard|tools/egress.py|s/if not literal and not ipaddress.ip_address(ip).is_global:/if False:/"
+  "egress_skip_connection_budget|tools/egress.py|s/over = self._conns > self._max_conn/over = False/"
+  "egress_skip_byte_budget|tools/egress.py|s/return self._bytes > self._max_bytes/return False/"
+  "egress_lenient_grammar|tools/egress.py|s/LINE.fullmatch(/LINE.match(/"
+  "egress_deny_not_audited|tools/egress.py|s/self._event(\"egress_denied\", reason=reason, \*\*fields)/pass/"
+  "egress_allowed_not_audited|tools/egress.py|s/self._event(\"egress_allowed\", host=host, port=port, ip=ip)/pass/"
+  "egress_without_audit_ok|tools/subprocess_handler.py|s/if spec.egress and audit is None:/if False:/"
+  "egress_entry_validation_off|tools/subprocess_handler.py|s/if not valid_entry(entry):/if False:/"
+  "egress_low_risk_ok|tools/registry.py|s/if worker.egress and spec.risk < RiskLevel.EXTERNAL:/if False:/"
+  "nproc_limit_removed|tools/worker.py|s/resource.setrlimit(resource.RLIMIT_NPROC, (max_procs, max_procs))/pass/"
 )
 fail=0; killed=0; ran=0
 ONLY="${MUTANT_ONLY:-}"  # optional regex for local iteration; CI runs all
@@ -69,13 +82,14 @@ for m in "${MUTANTS[@]}"; do
   if cmp -s "$target" "$ROOT/src/$file"; then
     echo "$name: NOT_APPLIED"; fail=1; continue
   fi
-  if (cd "$WORK/w" && timeout 120 python3 -m unittest discover -s tests -t . >/dev/null 2>&1); then
+  if (cd "$WORK/w" && timeout 120 python3 -m unittest discover -f -s tests -t . >/dev/null 2>&1); then
     echo "$name: SURVIVED"; fail=1
   else
     echo "$name: killed"; killed=$((killed+1))
   fi
   # a mutant that breaks process-group kill leaves the fixture's grandchild alive; reap it
   for t in 3599 3598 3597 3596; do pkill -fx "sleep $t" 2>/dev/null || true; done
+  pkill -f "/worker/worker.py" 2>/dev/null || true
 done
 echo "MUTATION mutants=$ran killed=$killed${ONLY:+ (filtered: $ONLY)}"
 [ -z "$ONLY" ] && [ "$ran" -ne "${#MUTANTS[@]}" ] && fail=1

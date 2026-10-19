@@ -1,9 +1,9 @@
 {
-  "cycle_id": "cycle-004-isolation",
-  "head_sha": "f0749ca0cd76068d5fc052f165636c919486b90f",
-  "head_sha_note": "Last commit verified by CI (run 39329642600). The commit containing this manifest is artifact-only; its own CI run is linked from PR #4.",
-  "baseline_sha": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e",
-  "branch": "cycle-4/isolation",
+  "cycle_id": "cycle-005-browser-egress",
+  "head_sha": "UNKNOWN until pushed and verified by CI",
+  "head_sha_note": "Updated after the PR run.",
+  "baseline_sha": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7",
+  "branch": "cycle-5/browser-egress",
   "capabilities": [
     {
       "id": "cap.control.policy",
@@ -98,34 +98,49 @@
     {
       "id": "cap.tools.os_sandbox",
       "status": "integrated",
-      "evidence": "src/tools/sandbox.py (bwrap: user/pid/net/ipc/uts ns, ro fs, tmpfs /tmp, cap-drop ALL, fail closed); tests/test_sandbox.py, tests/test_sandbox_adversarial.py (SANDBOX_ADVERSARIAL cases=21 escapes=0); D-0013, S-0006. No seccomp (gap)."
+      "evidence": "src/tools/sandbox.py (bwrap: user/pid/net/ipc/uts ns, ro fs, tmpfs /tmp, cap-drop ALL, fail closed); tests/test_sandbox.py, tests/test_sandbox_adversarial.py (SANDBOX_ADVERSARIAL cases=21 escapes=0); D-0013, S-0006. No seccomp (gap). cycle-005: RLIMIT_NPROC inside the userns (WorkerSpec.max_procs), fork-bomb test."
     },
     {
       "id": "cap.control.host_hardening",
       "status": "integrated",
       "evidence": "src/control_plane/hardening.py; ControlPlane.__init__ enforces PR_SET_DUMPABLE=0 or raises HostHardeningError; HostHardeningTests; mutants host_hardening_optional/not_applied killed (D-0014)"
+    },
+    {
+      "id": "cap.tools.egress",
+      "status": "integrated",
+      "evidence": "src/tools/egress.py (host-side Unix-socket CONNECT proxy: grammar, allowlist before DNS, rebinding guard, conn/byte budgets, every attempt audited); src/tools/subprocess_handler.py (WorkerSpec.egress, requires audit); src/tools/registry.py (egress requires risk>=EXTERNAL); tests/test_egress_adversarial.py; D-0015, R-0011"
+    },
+    {
+      "id": "cap.computer.browser",
+      "status": "integrated (fetch tier only; no JS)",
+      "evidence": "src/builtin_tools/browser.py, src/builtin_tools/egress_client.py, src/tools/builtins.py; tests/test_browser.py; Playwright/CDP deferred (R-0012)"
+    },
+    {
+      "id": "cap.security.credential_broker",
+      "status": "designed (not implemented)",
+      "evidence": "RM-0006, D-0016"
     }
   ],
   "verification": {
-    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 146 tests, OK (Python 3.13.5; 3.11 and 3.12 via uv)",
+    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 153 tests, OK (Python 3.13.5; 3.11 and 3.12 via uv)",
     "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
     "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
     "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
     "adversarial_sandbox": "SANDBOX_ADVERSARIAL cases=21 escapes=0",
-    "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=42 killed=42 (exit 0; no strays)",
-    "hardening": "HARDENING control_plane_construction={'before': False, 'after': True}; SANDBOX_PROC unhardened_host={'ok': False, 'visible_pids': 2, 'host_hardened': False}",
-    "leaks": "pgrep -fx 'sleep 35(99|98|97|96)' -> none after handler + sandbox suites",
-    "ci": "success: run 39329642600 on f0749ca (3.11/3.12/3.13 pass; 'Ran 146 tests'; 'SANDBOX_ADVERSARIAL cases=21 escapes=0'; 'MUTATION mutants=42 killed=42'; runner: bubblewrap 0.9.0 apt-installed, AppArmor userns restriction=1 relaxed CI-only (I-0012))"
+    "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
+    "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
+    "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=54 killed=54 (failfast, ~453 s locally; also 54/54 without failfast)",
+    "ci": "UNKNOWN until PR run completes"
   },
   "economics": {
     "expected_revenue_usd": 0,
     "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no metering until cycle-009)",
     "measured_cost_usd": "UNKNOWN",
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
-    "latency_cost": "sandbox adds ~+2 ms p50 per tool call locally (B-0007)"
+    "latency_cost": "browser fetch via proxy p50 ~41 ms locally vs sandboxed echo ~25-29 ms (B-0009)"
   },
-  "last_updated": "2026-10-19T21:58:00Z",
-  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/4",
+  "last_updated": "2026-10-19T22:45:00Z",
+  "pull_request": "UNKNOWN (opened after this commit)",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",
@@ -147,14 +162,21 @@
       "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/3",
       "merged_to_main": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e",
       "ci": "success: run 39325010443 on 12cefdd (3.11/3.12/3.13 pass; 'Ran 135 tests'; 'TOOL_ADVERSARIAL cases=20 unauthorized_executions=0'; 'no leaked worker processes'; 'MUTATION mutants=32 killed=32'). Earlier run 39323831631 on 42b7f9a failed the leak-check step only (I-0008). Final head a4554490 run 39325609307 success."
+    },
+    {
+      "cycle_id": "cycle-004-isolation",
+      "head_sha": "60b0a11bbaee185a75296555173c7c533f2d754a",
+      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/4",
+      "merged_to_main": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7",
+      "ci": "success: run 39329642600 on f0749ca (3.11/3.12/3.13 pass; 'Ran 146 tests'; 'SANDBOX_ADVERSARIAL cases=21 escapes=0'; 'MUTATION mutants=42 killed=42'; runner: bubblewrap 0.9.0 apt-installed, AppArmor userns restriction=1 relaxed CI-only (I-0012)) Final head 60b0a11 run 39330724213 success."
     }
   ],
-  "baseline_inspection_cycle_4": {
+  "baseline_inspection_cycle_5": {
     "branch": "main",
-    "head": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e (merge of PR #3)",
-    "ci": "success on PR #3 head a4554490 (run 39325609307)",
-    "open_prs": "none after merge of #3",
-    "dependencies": "stdlib; NEW system dependency: bubblewrap (D-0013)",
-    "security_controls": "Cycles 1-3; branch protection NOT available (S-0004)"
+    "head": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7 (merge of PR #4)",
+    "ci": "success on PR #4 head 60b0a11 (run 39330724213)",
+    "open_prs": "none after merge of #4",
+    "dependencies": "stdlib + system bubblewrap (D-0013); no new dependency this cycle",
+    "security_controls": "Cycles 1-4; branch protection NOT available (S-0004)"
   }
 }

@@ -83,12 +83,30 @@ deterministic `MockProvider` ships; no real model API is called.
   every trust change (`tool_events`). After a restart it re-binds accepted tools from their
   stored, re-validated `WorkerSpec`; candidates stay inert.
 
+## cycle-005-browser-egress: audited egress + `cap.browser.fetch`
+
+- **Egress (deny by default).** Workers keep `--unshare-net`. A `WorkerSpec` with
+  `egress=("host:port", ...)` (exact, lowercase, no wildcards) gets one Unix socket at
+  `/run/egress/sock`, served by a host-side `EgressProxy` for that call only.
+  - The worker sends `CONNECT host:port\n`. The proxy enforces a strict grammar, the
+    allowlist *before* any DNS lookup (so no DNS exfiltration), a rebinding guard (names must
+    resolve to global IPs), and per-call connection and byte budgets.
+  - Every attempt is audited (`egress_allowed`, `egress_denied`, `egress_failed`,
+    `egress_closed`).
+  - Egress requires risk ≥ EXTERNAL (so it is approval-gated) and an audit sink.
+- **Fork limit.** `RLIMIT_NPROC` (`max_procs`, default 32) is set inside the sandbox's user
+  namespace.
+- **`cap.browser.fetch`** (`tools.register_browser_fetch(registry, ("host:port",), by=...)`):
+  a stdlib GET with title, text and link extraction. Every redirect hop goes through the
+  proxy. TLS is verified. No cookies, credentials or JavaScript. Page content is untrusted data.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
 python3 bench/bench_control_plane.py 200           # execute() overhead
 python3 bench/bench_orchestrator.py 100            # agent run overhead (mock provider)
 python3 bench/bench_tools.py 50                    # sandboxed tool call overhead
+python3 bench/bench_browser.py 30                  # browser fetch via egress proxy (local fixture)
 MUTANT_ONLY='sandbox' bash scripts/mutation_check.sh  # local iteration on a subset
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl

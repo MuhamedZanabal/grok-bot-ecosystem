@@ -100,3 +100,18 @@
 - **rejected:** gating.
 - **tradeoffs:** shared-runner noise.
 - **reversal criteria:** CI p50 > 50 ms on two consecutive runs → investigate the spawn cost (e.g. a pre-built bwrap argv or a lighter probe).
+
+## B-0009: Browser fetch via the egress proxy
+- **decision_id:** B-0009
+- **date:** 2026-10-20
+- **problem:** Measure the cost of the proxy plus HTTP plus extraction.
+- **options:** n/a (measurement).
+- **evidence:** local box:
+  - `python3 bench/bench_browser.py 30` gave `p50_ms=40.942 p95_ms=43.292 max_ms=44.885` after the wake-pipe fix. The first version gave `p50_ms=136.731` (D-0017).
+  - Same session, `bench_tools.py 50` (sandboxed echo, no egress) gave `p50_ms=29.035`.
+  - So the proxy, `/etc/ssl` mount, HTTP round trip to the local fixture and parsing add about 12 ms p50.
+  - System Chrome headless inside bwrap took about 2 s per launch (D-0015 probe; not benchmarked repeatedly).
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** the local fixture only; real-site latency is UNKNOWN.
+- **reversal criteria:** browser p50 > 200 ms locally.

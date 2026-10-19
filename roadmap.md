@@ -96,3 +96,14 @@
 - **rejected:** implementing it now (out of scope by instruction).
 - **tradeoffs:** none.
 - **reversal criteria:** n/a.
+
+## RM-0007: After cycle-005
+- **decision_id:** RM-0007
+- **date:** 2026-10-20
+- **problem:** Next target.
+- **options:** cycle-006 memory/knowledge (per RM-0004), or a JS-capable browser tier.
+- **evidence:** S-0007 gaps 1-2 (exfiltration to allowlisted hosts; untrusted page content) matter most once memory persists page content.
+- **selected:** cycle-006 memory/knowledge, storing fetched content as *untrusted, provenance-tagged* records (source URL, fetch audit seq, hash) and never as instructions. The JS tier (CDP to system Chrome via an in-sandbox forwarder to the same proxy) is a later sub-cycle, triggered by the first capability that needs it (D-0015 reversal criteria).
+- **rejected:** the JS tier now (no in-scope need).
+- **tradeoffs:** none.
+- **reversal criteria:** a capability needs JS rendering.

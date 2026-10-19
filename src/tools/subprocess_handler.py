@@ -19,6 +19,7 @@ import tempfile
 
 from control_plane import HandlerFailure, HandlerTimeout, IsolatedHandler
 
+from .egress import SOCKET_DIR_IN_SANDBOX, EgressProxy, valid_entry
 from .sandbox import SANDBOX_TOOL_ROOT, Sandbox
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
@@ -46,6 +47,10 @@ class WorkerSpec:
     memory_mb: int = 512
     env_allow: tuple[str, ...] = ()
     max_output_bytes: int = 1024 * 1024
+    max_procs: int = 32
+    egress: tuple[str, ...] = ()          # exact "host:port" entries; empty = no network at all
+    egress_max_connections: int = 16
+    egress_max_bytes: int = 8 * 1024 * 1024
 
     def __post_init__(self) -> None:
         if not os.path.isabs(self.tool_root) or not os.path.isdir(self.tool_root):
@@ -59,16 +64,29 @@ class WorkerSpec:
                 raise ValueError(f"bad env name {name!r}")
             if SENSITIVE_ENV.search(name):
                 raise ValueError(f"env {name!r} looks like a credential; secrets are not passed to tools")
+        if not (4 <= self.max_procs <= 256):
+            raise ValueError("max_procs out of range")
+        if not isinstance(self.egress, tuple) or len(self.egress) > 32:
+            raise ValueError("egress must be a tuple of at most 32 host:port entries")
+        for entry in self.egress:
+            if not valid_entry(entry):
+                raise ValueError(f"bad egress entry {entry!r} (exact lowercase host:port; no wildcards)")
+        if not (1 <= self.egress_max_connections <= 256) or not (1 <= self.egress_max_bytes <= 256 * 1024 * 1024):
+            raise ValueError("egress budgets out of range")
 
 
 class SubprocessHandler(IsolatedHandler):
-    __slots__ = ("spec", "_sandbox")
+    __slots__ = ("spec", "_sandbox", "_audit", "_capability")
     isolation = "bwrap"
 
-    def __init__(self, spec: WorkerSpec) -> None:
+    def __init__(self, spec: WorkerSpec, *, audit=None, capability: str = "unbound") -> None:
         if not isinstance(spec, WorkerSpec):
             raise TypeError("spec must be a WorkerSpec")
+        if spec.egress and audit is None:
+            raise ValueError("egress_requires_audit")  # no unaudited network, ever
         object.__setattr__(self, "spec", spec)
+        object.__setattr__(self, "_audit", audit)
+        object.__setattr__(self, "_capability", capability)
         object.__setattr__(self, "_sandbox", Sandbox.detect())  # raises SandboxUnavailable
 
     def __setattr__(self, name, value) -> None:
@@ -87,25 +105,45 @@ class SubprocessHandler(IsolatedHandler):
     def __call__(self, args: dict):
         s = self.spec
         request = json.dumps({"v": 1, "tool_root": SANDBOX_TOOL_ROOT, "module": s.module, "function": s.function,
-                              "args": args, "limits": {"cpu_s": s.cpu_s, "memory_mb": s.memory_mb}},
+                              "args": args, "limits": {"cpu_s": s.cpu_s, "memory_mb": s.memory_mb,
+                                                       "max_procs": s.max_procs}},
                              allow_nan=False).encode()
         with tempfile.TemporaryDirectory(prefix="tool-") as cwd:
-            argv = self._sandbox.argv(WORKER, s.tool_root, self._env())
-            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL, cwd=cwd, env={"PATH": "/usr/bin:/bin"},
-                                    close_fds=True, start_new_session=True)
+            binds: tuple = ()
+            proxy = None
+            if s.egress:
+                proxy = EgressProxy(s.egress, self._audit, self._capability,
+                                    max_connections=s.egress_max_connections, max_bytes=s.egress_max_bytes)
+                egress_dir = os.path.join(cwd, "egress")
+                os.mkdir(egress_dir, 0o700)
+                proxy.start(egress_dir)
+                binds = ((egress_dir, SOCKET_DIR_IN_SANDBOX),)
+                if os.path.isdir("/etc/ssl"):
+                    binds += (("/etc/ssl", "/etc/ssl"),)  # CA bundle for TLS verification inside the worker
             try:
-                out, _ = proc.communicate(request, timeout=s.timeout_s)
-            except subprocess.TimeoutExpired:
-                _kill_group(proc)
-                raise HandlerTimeout("worker_killed") from None
+                return self._run(proc_argv=self._sandbox.argv(WORKER, s.tool_root, self._env(), binds),
+                                 request=request, cwd=cwd)
             finally:
-                if proc.poll() is None:  # any other exit path: never leave a live worker
-                    _kill_group(proc)
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)  # reap stragglers the tool spawned in its group
-            except (ProcessLookupError, PermissionError):
-                pass
+                if proxy is not None:
+                    proxy.stop()
+
+    def _run(self, proc_argv: list, request: bytes, cwd: str):
+        s = self.spec
+        proc = subprocess.Popen(proc_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, cwd=cwd, env={"PATH": "/usr/bin:/bin"},
+                                close_fds=True, start_new_session=True)
+        try:
+            out, _ = proc.communicate(request, timeout=s.timeout_s)
+        except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            raise HandlerTimeout("worker_killed") from None
+        finally:
+            if proc.poll() is None:  # any other exit path: never leave a live worker
+                _kill_group(proc)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)  # reap stragglers the tool spawned in its group
+        except (ProcessLookupError, PermissionError):
+            pass
         if len(out) > s.max_output_bytes:
             raise WorkerError("worker_output_too_large")
         try:

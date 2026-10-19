@@ -184,3 +184,55 @@ def silent_exit(args):
 def bad_error_code(args):
     os.write(3, b'{"ok":false,"error":"<script>ghp_' + b"Z" * 36 + b'</script>"}\n')
     os._exit(1)
+
+
+def raw_egress(args):
+    """Speak raw bytes to the egress proxy socket (adversarial protocol cases)."""
+    import socket
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(5)
+    try:
+        s.connect("/run/egress/sock")
+    except OSError as exc:
+        return {"connected": False, "error": type(exc).__name__}
+    try:
+        s.sendall(args["line"].encode("latin-1"))
+        reply = b""
+        while not reply.endswith(b"\n") and len(reply) < 128:
+            c = s.recv(1)
+            if not c:
+                break
+            reply += c
+        out = {"connected": True, "reply": reply.decode("ascii", "replace")}
+        if reply == b"OK\n" and args.get("payload"):
+            s.sendall(args["payload"].encode())
+            out["response"] = s.recv(4096).decode("latin-1")
+        return out
+    except OSError as exc:
+        return {"connected": True, "reply": "", "error": type(exc).__name__}
+    finally:
+        s.close()
+
+
+def fork_count(args):
+    """Fork children (each sleeps) until the process limit refuses; report how many."""
+    n = 0
+    for _ in range(int(args.get("tries", 500))):
+        try:
+            pid = os.fork()
+        except OSError as exc:
+            return {"forked": n, "errno": exc.errno}
+        if pid == 0:
+            time.sleep(30)
+            os._exit(0)
+        n += 1
+    return {"forked": n, "errno": None}
+
+
+def fork_bomb(args):
+    """Classic fork bomb: every process keeps forking forever."""
+    while True:
+        try:
+            os.fork()
+        except OSError:
+            time.sleep(0.001)

@@ -200,3 +200,28 @@
 - **rejected:** n/a.
 - **tradeoffs:** no branch protection (S-0004).
 - **reversal criteria:** n/a.
+
+## I-0014: cycle-005-browser-egress integrated on branch `cycle-5/browser-egress`
+- **decision_id:** I-0014
+- **date:** 2026-10-20
+- **problem:** Integrate D-0015 scope: egress, fork limit, browser fetch tier.
+- **options:** D-0015, D-0017, R-0011, R-0012.
+- **evidence:**
+  - **New code:**
+    - `src/tools/egress.py` (229 lines), `src/builtin_tools/browser.py` (about 170), `src/builtin_tools/egress_client.py` (34), `src/tools/builtins.py` (36).
+    - Edited `subprocess_handler.py` (WorkerSpec `egress`, `max_procs` and budgets; the proxy lifecycle per call; egress requires audit), `registry.py` (egress requires risk ≥ EXTERNAL; handler gets the audit sink and capability id), `sandbox.py` (`extra_ro_binds`) and `worker.py` (`RLIMIT_NPROC`).
+    - About 550 new production lines, within the ≤700 budget. No new dependency.
+  - **Local runs:** `python3 -m unittest discover -s tests -t .` gave `Ran 153 tests ... OK` (3.13.5). 3.11 and 3.12 via uv also gave OK after the D-0017 CA fix.
+  - **Adversarial output:**
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True resolutions=['localhost']`. The only resolution was the allowlisted `localhost` in the rebinding-guard case; the canary and `*.invalid` names were never resolved.
+    - `FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0`.
+    - `ADVERSARIAL 20/0`, `ORCH_ADVERSARIAL 18/0`, `TOOL_ADVERSARIAL 20/0` and `SANDBOX_ADVERSARIAL 21/0` are unchanged.
+  - **Browser:** `BROWSER_FETCH {"ok": true, "status": 200, "title": "Fixture Page", "links": ["http://127.0.0.1:<port>/next", "http://other.invalid/z"]}` via registry → policy → approval → sandbox → proxy → local fixture. Without an approval it is `approval_required` (fixture hits `[]`). A `file:` URL is `rejected` by the schema. An ungranted actor is `denied`.
+  - **Mutation:**
+    - The first full run (without failfast) gave `MUTATION mutants=54 killed=54`, `exit=0`, in about 30 min locally.
+    - `unittest -f` (failfast) was then added to the mutation script for speed. A subset of 13 gave `13/13` in 96 s. The full failfast run gave `MUTATION mutants=54 killed=54`, `exit=0`, `elapsed=453s`.
+  - **Cleanup:** after the suites, `pgrep -fa "worker.py|sleep 35"` gave none. Fixture servers are shut down in `tearDown`; proxies are stopped in the handler's `finally`.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** see S-0007.
+- **reversal criteria:** any CI failure or unauthorized egress.
