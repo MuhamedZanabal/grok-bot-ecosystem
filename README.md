@@ -42,11 +42,35 @@ Terminal run states: `completed`, `awaiting_approval`, `cycle_aborted`, `killed`
 Providers are tried in order with bounded attempts and per-call timeouts. Only the
 deterministic `MockProvider` ships; no real model API is called.
 
+## Cycle 3: tool substrate (`src/tools/`, `control_plane/schema.py`)
+
+- **Out-of-process handlers.** `ControlPlane` binds only `IsolatedHandler`s by default
+  (`allow_inprocess_handlers=False`). `SubprocessHandler(WorkerSpec(...))` runs each call in a
+  fresh `python -I -S worker.py` with:
+  - a new process group and an empty temp cwd;
+  - `close_fds`;
+  - an env built only from `PATH`/`LANG` plus an explicit allowlist (names that look like
+    credentials are refused);
+  - CPU, address-space and no-core rlimits;
+  - a wall-clock deadline after which the whole process group is SIGKILLed.
+
+  Call `tools.hardening.set_non_dumpable()` at host startup so same-UID workers cannot read the
+  host's `/proc/<pid>/environ`.
+- **Argument schemas.** Every bound capability declares a JSON-Schema-subset `args_schema`,
+  enforced before execution. It is stricter than JSON Schema: missing `additionalProperties`
+  means false, `pattern` is a full match, and unknown keywords are rejected.
+- **Typed tool registry + MCP adapter.** `ToolRegistry.import_mcp(server, tools_list_payload)`
+  maps MCP `tools/list` definitions to `cap.mcp_<server>.<name>` as **candidates**: not
+  registered with policy, not executable, proposed at risk 3 regardless of annotations.
+  `accept()` (operator, explicit risk, worker, reason) makes a candidate executable; a grant is
+  still required. There is no MCP transport (no network).
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
 python3 bench/bench_control_plane.py 200           # execute() overhead
 python3 bench/bench_orchestrator.py 100            # agent run overhead (mock provider)
+python3 bench/bench_tools.py 50                    # out-of-process tool call overhead
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl
 ```

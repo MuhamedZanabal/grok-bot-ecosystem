@@ -27,6 +27,19 @@ MUTANTS=(
   "skip_provider_timeout|orchestrator/runner.py|s/future.result(timeout=self._cfg.provider_timeout_s)/future.result()/"
   "skip_run_budget|orchestrator/runner.py|s/if state is not LoopState.RUNNING:/if False:/"
   "random_operation_id|orchestrator/runner.py|s/{digest\[:32\]}/{__import__(\"os\").urandom(8).hex()}/"
+  # Cycle 3
+  "skip_schema_enforcement|control_plane/executor.py|s/validate_args(self.policy.capability(cap).schema, args)/pass/"
+  "inprocess_allowed_by_default|control_plane/executor.py|s/allow_inprocess_handlers: bool = False/allow_inprocess_handlers: bool = True/"
+  "schema_additional_default_true|control_plane/schema.py|s/if not schema.get(\"additionalProperties\", False):/if not schema.get(\"additionalProperties\", True):/"
+  "schema_pattern_search|control_plane/schema.py|s/re.fullmatch(schema\[\"pattern\"\], value)/re.search(schema[\"pattern\"], value)/"
+  "schema_bool_is_int|control_plane/schema.py|s/\"integer\": isinstance(v, int) and not isinstance(v, bool),/\"integer\": isinstance(v, int),/"
+  "schema_unknown_keywords_ok|control_plane/schema.py|s/unknown = set(schema) - KEYWORDS/unknown = set()/"
+  "worker_env_inherit|tools/subprocess_handler.py|s/env = dict(BASE_ENV)/env = dict(os.environ)/"
+  "worker_kill_pid_not_group|tools/subprocess_handler.py|s/os.killpg(proc.pid, signal.SIGKILL)/proc.kill()/g"
+  "worker_sensitive_env_ok|tools/subprocess_handler.py|s/if SENSITIVE_ENV.search(name):/if False:/"
+  "worker_skip_tool_root_check|tools/worker.py|s/if not os.path.realpath(getattr(module, \"__file__\", None) or \"\/\").startswith(root):/if False:/"
+  "mcp_default_risk_read|tools/mcp_adapter.py|s/RiskLevel.IRREVERSIBLE, ann_json, error))/RiskLevel.READ, ann_json, error))/"
+  "mcp_import_as_accepted|tools/registry.py|s/TrustState.CANDIDATE, f\"annotations=/TrustState.ACCEPTED, f\"annotations=/"
 )
 fail=0; killed=0
 for m in "${MUTANTS[@]}"; do

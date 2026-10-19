@@ -116,7 +116,8 @@ class HandlerIsolationTests(unittest.TestCase):
             req = json.loads(c)
             self.assertEqual(set(req), {"v", "run_id", "task", "protocol", "catalog", "transcript"})
             self.assertEqual(req["catalog"], [{"capability": "cap.fs.read", "risk": 0,
-                                               "description": "test capability cap.fs.read"}])
+                                               "description": "test capability cap.fs.read",
+                                               "args_schema": {"type": "object", "additionalProperties": True}}])
             for marker in ("<function", "<bound", "lambda", "object at 0x", "handler"):
                 self.assertNotIn(marker, c)
 
@@ -156,14 +157,53 @@ class HandlerIsolationTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             gw.submit(operation_id="op-spoof-002", capability="cap.fs.read", args={}, actor="agent.alpha")
 
-    def test_known_gap_in_process_introspection(self):
-        """Documented gap (security_log.md S-0003): same-process Python code can still reach
-        handlers by introspection. This test pins the gap so that closing it (out-of-process
-        handlers, Cycle 3) is a visible, intentional change."""
-        gw = self.h.cp.gateway("agent.alpha")
-        reachable = object.__getattribute__(gw, "_execute").__self__._handlers
-        self.assertIn("cap.fs.read", reachable)
+    def test_gap_closed_tool_code_cannot_reach_handlers(self):
+        """Was test_known_gap_in_process_introspection (Cycle 2, S-0003 gap 1).
 
+        Closed in Cycle 3. On a strict control plane (the default), handlers are SubprocessHandler
+        launchers that hold only a frozen WorkerSpec (data). Tool code runs in a separate worker
+        process, where it cannot import or find control-plane objects, handlers, ledger/audit
+        file descriptors or parent env secrets (tests/test_subprocess_handler.py::WorkerIsolationTests).
+        """
+        from control_plane import Capability, RiskLevel
+        from tests.helpers import OPEN_SCHEMA, worker
+        from tools import SubprocessHandler, WorkerSpec
+        strict = Harness(inprocess=False)
+        try:
+            strict.policy.register(Capability("cap.tool.probe", RiskLevel.READ, "", OPEN_SCHEMA))
+            strict.cp.bind("cap.tool.probe", SubprocessHandler(worker("probe")))
+            with self.assertRaises(ValueError):
+                strict.cp.bind("cap.tool.probe", lambda args: "in-process tool code")
+            gw = strict.cp.gateway("agent.alpha")
+            reachable = object.__getattribute__(gw, "_execute").__self__._handlers
+            for h in reachable.values():
+                self.assertIsInstance(h, SubprocessHandler)
+                self.assertIsInstance(h.spec, WorkerSpec)
+                self.assertFalse(hasattr(h, "__dict__"))
+            self.assertNotIn("sample_tools", sys.modules)  # tool code never loaded in-process
+            strict.policy.grant("agent.alpha", "cap.tool.probe")
+            r = gw.submit(operation_id="op-probe-0001", capability="cap.tool.probe", args={}).result
+            self.assertEqual((r["importable"], r["loaded"], r["gc_hits"]), ([], [], 0))
+        finally:
+            strict.close()
+
+    def test_residual_trusted_inprocess_code_can_invoke_launchers(self):
+        """Residual (S-0005): code running INSIDE the control-plane process (trusted runner and
+        adapter code, the TCB) can still call a launcher directly and skip policy. The model
+        cannot (its only channel is text); tool code cannot (separate process). Pinned so that
+        moving the control plane behind a process boundary is a visible change."""
+        from control_plane import Capability, RiskLevel
+        from tests.helpers import OPEN_SCHEMA, worker
+        from tools import SubprocessHandler
+        strict = Harness(inprocess=False)
+        try:
+            strict.policy.register(Capability("cap.tool.echo", RiskLevel.READ, "", OPEN_SCHEMA))
+            strict.cp.bind("cap.tool.echo", SubprocessHandler(worker("echo")))
+            gw = strict.cp.gateway("agent.alpha")
+            launcher = object.__getattribute__(gw, "_execute").__self__._handlers["cap.tool.echo"]
+            self.assertEqual(launcher({"x": 1}), {"echo": {"x": 1}})
+        finally:
+            strict.close()
 
 if __name__ == "__main__":
     unittest.main()

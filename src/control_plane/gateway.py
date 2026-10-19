@@ -48,5 +48,5 @@ class ActorGateway:
         return self._execute(request, cost)
 
     def catalog(self) -> list[dict]:
-        return [{"capability": c.id, "risk": int(c.risk), "description": c.description}
-                for c in self._catalog(self._actor)]
+        return [{"capability": c.id, "risk": int(c.risk), "description": c.description,
+                 "args_schema": c.schema} for c in self._catalog(self._actor)]
