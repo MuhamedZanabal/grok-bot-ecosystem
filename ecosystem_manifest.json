@@ -1,29 +1,14 @@
 {
-  "cycle_id": "cycle-001-control-plane",
-  "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
-  "head_sha_note": "Last commit verified by CI (run 39319720689). The commit containing this manifest is artifact-only and cannot embed its own SHA; its CI run is linked from PR #1.",
-  "baseline_sha": "b7fa4c351da1bc89983346ee5ae8f23fbf6b7920",
-  "branch": "cycle-1/control-plane",
-  "baseline_inspection": {
-    "repository": "MuhamedZanabal/grok-bot-ecosystem (private, created 2026-10-19)",
-    "branch": "main",
-    "head": "b7fa4c351da1bc89983346ee5ae8f23fbf6b7920",
-    "files": [
-      ".gitignore",
-      "README.md"
-    ],
-    "architecture": "none (new, empty repository)",
-    "ci": "none (gh run list: empty)",
-    "open_prs": "none (gh pr list --state all: empty)",
-    "dependencies": "none",
-    "security_controls": "none",
-    "branch_protection": "UNKNOWN (not inspected)"
-  },
+  "cycle_id": "cycle-002-orchestration",
+  "head_sha": "2c13995821cf157675e668fbeb4cf582b024cc02",
+  "head_sha_note": "Cycle 2 implementation commit on cycle-2/orchestration. Artifact-only commits that follow cannot embed their own SHA; the final head and its CI run are in integration_log.md / PR.",
+  "baseline_sha": "7edabd1e8efe6794446c9a9a41256c8088f0decc",
+  "branch": "cycle-2/orchestration",
   "capabilities": [
     {
       "id": "cap.control.policy",
       "status": "integrated",
-      "evidence": "src/control_plane/policy.py; tests/test_policy.py; python3 -m unittest discover -s tests -t . -> 'Ran 52 tests ... OK'"
+      "evidence": "src/control_plane/policy.py; tests/test_policy.py; python3 -m unittest discover -s tests -t . -> 'Ran 52 tests ... OK'; Cycle 2: backed by persistent GrantStore, decisions carry policy_version"
     },
     {
       "id": "cap.control.approvals",
@@ -57,26 +42,65 @@
     },
     {
       "id": "cap.control.persistent_policy_store",
-      "status": "candidate",
-      "evidence": "UNKNOWN: grants are in-memory only in Cycle 1 (remaining gap)"
+      "status": "integrated",
+      "evidence": "src/control_plane/grant_store.py; tests/test_grant_store.py (restart persistence, monotonic versions, grant/revoke audit, risk-escalation invalidation)"
     },
     {
       "id": "cap.orchestration.agent_runtime",
+      "status": "integrated",
+      "evidence": "src/orchestrator/runner.py; tests/test_runner.py (19 tests: duplicates, timeout fallback, outage, malformed, budgets, kill, approval pause/resume, in_doubt)"
+    },
+    {
+      "id": "cap.control.gateway",
+      "status": "integrated",
+      "evidence": "src/control_plane/gateway.py; tests/test_orchestrator_adversarial.py::HandlerIsolationTests (data-only surface, immutable, unpicklable, actor not spoofable). In-process introspection gap pinned by test_known_gap_in_process_introspection"
+    },
+    {
+      "id": "cap.orchestration.provider_interface",
+      "status": "integrated",
+      "evidence": "src/orchestrator/provider.py (str->str Protocol + deterministic MockProvider); no real provider adapter exists (UNKNOWN fit for any vendor API)"
+    },
+    {
+      "id": "cap.orchestration.proposal_parser",
+      "status": "integrated",
+      "evidence": "src/orchestrator/proposal.py; tests/test_proposal.py (13 stable malformed codes)"
+    },
+    {
+      "id": "cap.tools.typed_mcp",
       "status": "candidate",
-      "evidence": "roadmap.md Cycle 2; nothing implemented"
+      "evidence": "roadmap.md Cycle 3; nothing implemented"
     }
   ],
   "verification": {
-    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 52 tests, OK (Python 3.13.5 and 3.11 via uv)",
-    "adversarial": "ADVERSARIAL cases=20 unauthorized_executions=0",
-    "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=10 killed=10",
-    "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
+    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 93 tests, OK (Python 3.13.5; also 3.11 via uv)",
+    "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
+    "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
+    "mutation": "bash scripts/mutation_check.sh -> MUTATION mutants=20 killed=20",
+    "ci": "UNKNOWN at time of writing; recorded in integration_log.md after the PR run"
   },
   "economics": {
     "expected_revenue_usd": 0,
-    "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no cost telemetry until Cycle 8)",
-    "measured_cost_usd": "UNKNOWN"
+    "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no metering until Cycle 8)",
+    "measured_cost_usd": "UNKNOWN",
+    "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement"
   },
-  "last_updated": "2026-10-19T20:30:10Z",
-  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1"
+  "last_updated": "2026-10-19T20:40:19Z",
+  "pull_request": "UNKNOWN until opened (see integration_log.md)",
+  "cycle_history": [
+    {
+      "cycle_id": "cycle-001-control-plane",
+      "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
+      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1",
+      "merged_to_main": "7edabd1e8efe6794446c9a9a41256c8088f0decc",
+      "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
+    }
+  ],
+  "baseline_inspection_cycle_2": {
+    "branch": "main",
+    "head": "7edabd1e8efe6794446c9a9a41256c8088f0decc (merge of PR #1)",
+    "ci": "success on PR #1 head 7c6a998 (run 39319854185)",
+    "open_prs": "none after merge of #1",
+    "dependencies": "none (stdlib only)",
+    "security_controls": "Cycle 1 control plane; branch protection NOT available (HTTP 403, see security_log.md S-0004)"
+  }
 }

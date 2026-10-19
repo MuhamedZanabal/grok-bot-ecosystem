@@ -19,3 +19,19 @@
 - **rejected:** a revenue sub-cycle now, with no telemetry to evidence it.
 - **tradeoffs:** revenue is deferred until the cost and risk controls exist.
 - **reversal criteria:** a revenue workflow can run entirely at risk levels 0-1 with measured cost; then it may be proposed earlier, with evidence recorded in decision_log.md.
+
+## RM-0002: Roadmap after Cycle 2
+- **decision_id:** RM-0002
+- **date:** 2026-10-19
+- **problem:** Carry Cycle 2 gaps into the next cycles.
+- **options:** keep the default order, or pull security hardening forward.
+- **evidence:** security_log.md S-0003 gaps 1-5 and S-0004.
+- **selected:** default order, with explicit scope additions:
+  - **Cycle 3 (typed tool + MCP substrate):** must include out-of-process handler execution (`cap.tools.handler_isolation`), closing S-0003 gap 1 and flipping `test_known_gap_in_process_introspection`, plus per-capability JSON-schema validation of args.
+  - **Cycle 7:** persisted run state machine (replaces resume-by-rerun, D-0007) and approval-expiry handling for paused runs.
+  - **Cycle 8:** real token/$ metering to replace `RunConfig.model_call_cost` estimates.
+  - **Cycle 9:** grant-store authentication and file permissions, HMAC key custody, audit anchoring, and tool-output content filtering.
+  - Branch protection: blocked on plan (S-0004); needs a user decision.
+- **rejected:** pulling Cycle 9 forward. The highest-risk open gap (in-process reach) is structurally fixed by Cycle 3 isolation.
+- **tradeoffs:** Cycle 3 grows slightly in scope.
+- **reversal criteria:** a real provider adapter is added before Cycle 3, in which case isolation must land first.

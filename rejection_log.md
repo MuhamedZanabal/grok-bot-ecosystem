@@ -21,3 +21,36 @@
 - **rejected:** ruff, deferred to avoid adding a downloaded tool to the supply chain in the first cycle.
 - **tradeoffs:** compileall only catches syntax errors, not style or unused code.
 - **reversal criteria:** Cycle 9 adds pinned, hash-verified dev tooling.
+
+## R-0003: Third-party agent frameworks for orchestration
+- **decision_id:** R-0003
+- **date:** 2026-10-19
+- **problem:** Whether to adopt an agent framework for Cycle 2.
+- **options:** an external agent framework, or the stdlib runner (`src/orchestrator/`, 554 new lines including grant store and gateway).
+- **evidence:** the stdlib runner meets all six success criteria (D-0004; see integration_log.md I-0004). No framework was benchmarked, so comparative merit is UNKNOWN.
+- **selected:** stdlib runner.
+- **rejected:** frameworks are deferred, not evaluated. Spec: external code is untrusted, and frameworks typically pass tool callables to model-adjacent code, which conflicts with D-0006.
+- **tradeoffs:** we write our own provider adapters.
+- **reversal criteria:** a framework offers a capability we need (e.g. streaming or multi-agent handoff) that is measurably cheaper than building it, and can sit behind `ModelProvider` without receiving handlers.
+
+## R-0004: Vendor-native tool-calling schemas
+- **decision_id:** R-0004
+- **date:** 2026-10-19
+- **problem:** Use vendor function-calling formats instead of a JSON text protocol.
+- **options:** native tool calling, or the JSON text protocol (`runner.PROTOCOL`).
+- **evidence:** no real provider adapter exists in Cycle 2, so there is no parse-failure data. UNKNOWN.
+- **selected:** text protocol.
+- **rejected:** deferred.
+- **tradeoffs:** possibly higher malformed-output rates with real models (UNKNOWN; not measured).
+- **reversal criteria:** measured malformed rate above 2% on a real adapter.
+
+## R-0005: Working around unavailable branch protection
+- **decision_id:** R-0005
+- **date:** 2026-10-19
+- **problem:** Branch protection on private `main` returned HTTP 403 (S-0004).
+- **options:** make the repo public, try repository rulesets or another API route, upgrade the plan, or accept and record the gap.
+- **evidence:** `gh api -X PUT repos/MuhamedZanabal/grok-bot-ecosystem/branches/main/protection` gave `"Upgrade to GitHub Pro or make this repository public to enable this feature." (HTTP 403)`.
+- **selected:** record the gap; no workaround attempted.
+- **rejected:** making the repo public (the user asked for private); alternate API routes (instructed not to work around); upgrading (a purchase needs the user).
+- **tradeoffs:** merges are not technically gated on CI. This is procedural only: the agent re-checks `gh pr checks` before every merge.
+- **reversal criteria:** the user upgrades the plan or chooses to make the repo public.

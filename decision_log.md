@@ -69,3 +69,36 @@
 - **rejected:** (a) external code is untrusted and the spec asks for dependency-light work (see R-0003); (c) leaves gaps 4 and 5 open, and hardening without a runner has nothing to harden.
 - **tradeoffs:** a run is resumed by re-running with the same run_id and approvals, which relies on ledger idempotency rather than a persisted run state machine (that is Cycle 7). Each provider call is charged at a configured estimate, not metered.
 - **reversal criteria:** if real providers need streaming or tool-calling formats that do not fit text-in/text-out, add an adapter layer that still emits the same `Proposal` type. If cross-process isolation becomes required (Cycle 3 handlers), move handlers out of process behind the same gateway API.
+
+## D-0005: Merge PR #1 with a merge commit (not squash)
+- **decision_id:** D-0005
+- **date:** 2026-10-19
+- **problem:** How to land Cycle 1 on `main`.
+- **options:** squash, rebase, merge commit.
+- **evidence:** Cycle 1 artifacts cite commit SHAs `2784633`, `560de62`, `7c6a998` as evidence pointers. Squash or rebase would drop those commits from `main` history. `gh pr checks 1` was green, then `gh pr merge 1 --merge --match-head-commit 7c6a998...` produced merge commit `7edabd1e8efe6794446c9a9a41256c8088f0decc`.
+- **selected:** merge commit; the head was pinned so an unreviewed push could not slip in.
+- **rejected:** squash and rebase, because they break evidence pointers.
+- **tradeoffs:** a slightly noisier history.
+- **reversal criteria:** if the logs stop citing intermediate SHAs, squash becomes acceptable.
+
+## D-0006: Model interface is text-in/text-out; proposals are the only output channel
+- **decision_id:** D-0006
+- **date:** 2026-10-19
+- **problem:** Make orchestration model-neutral and ensure a model can never hold or invoke a handler.
+- **options:** (a) pass tool objects or callables to the model adapter (framework style); (b) give the adapter a canonical-JSON string and accept back a string that a strict parser turns into `ActionProposal`/`FinalProposal`; (c) vendor-native tool-calling schemas.
+- **evidence:** `src/orchestrator/provider.py` (`complete(request_json: str) -> str`). `tests/test_orchestrator_adversarial.py::HandlerIsolationTests::test_provider_receives_only_a_json_string_with_no_callables`. `ORCH_ADVERSARIAL cases=18 unauthorized_executions=0`.
+- **selected:** (b). The runner holds only an `ActorGateway` (`AgentRunner` raises `TypeError` for anything else).
+- **rejected:** (a), because it hands authority to untrusted code; (c), deferred as vendor-specific (R-0004).
+- **tradeoffs:** native tool-calling reliability gains are not used; adapters must translate.
+- **reversal criteria:** a real provider adapter in a later cycle shows a measurable parse-failure rate that native tool calling would remove. Native calls must still terminate in the same `Proposal` types.
+
+## D-0007: Deterministic operation ids; resume by re-run
+- **decision_id:** D-0007
+- **date:** 2026-10-19
+- **problem:** Duplicate proposals, re-runs and post-approval resumes must not re-execute actions.
+- **options:** (a) random operation id per proposal; (b) `run:<run_id>:<sha256(capability, args, idempotency_key)[:32]>`; (c) a persisted run state machine.
+- **evidence:** `src/orchestrator/runner.py::operation_id_for`. `tests/test_runner.py::test_duplicate_proposals_execute_once` (4 identical proposals give 1 execution and 3 replays), `test_rerun_same_run_id_replays_instead_of_reexecuting`, and `test_approval_required_pauses_and_resume_completes`. Mutant `random_operation_id` is killed.
+- **selected:** (b). Models that need a repeated identical action supply distinct `idempotency_key`s (`test_distinct_idempotency_keys_are_distinct_operations`).
+- **rejected:** (a), which breaks dedup; (c), deferred to Cycle 7 (workflow engine).
+- **tradeoffs:** resume relies on the model reproducing the same proposals. A non-deterministic real model may diverge on re-run, in which case new proposals simply need new approvals.
+- **reversal criteria:** Cycle 7 introduces persisted run state; then resume continues from stored state instead of re-running.
