@@ -168,3 +168,17 @@
 - **rejected:** gating.
 - **tradeoffs:** report cost grows with claims × peers (contradiction check is O(n²) per subject/attribute); untested beyond 50 claims (UNKNOWN).
 - **reversal criteria:** report p50 > 1 s at 1k claims.
+
+## B-0014: Research bench on the CI runner
+- **decision_id:** B-0014
+- **date:** 2026-10-20
+- **problem:** Record the CI-runner research latency next to B-0013 (local).
+- **options:** n/a (measurement).
+- **evidence:** run 39349488423, job test (3.13):
+  - `BENCH research_pass n=50 p50_ms=77.247 p95_ms=80.195 sources_per_pass=1`
+  - `BENCH research_report n=50 p50_ms=4.631 final_claims=50`
+  - Same job: `browser_fetch p50_ms=57.737`, so a pass adds about 19.5 ms of control-plane and memory work over the bare fetch.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** single run; runner noise.
+- **reversal criteria:** as B-0013.

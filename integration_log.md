@@ -340,3 +340,30 @@
 - **rejected:** n/a.
 - **tradeoffs:** S-0009.
 - **reversal criteria:** any CI failure or violation.
+
+## I-0021: cycle-007 CI result on PR #7
+- **decision_id:** I-0021
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-007 (D-0020 required this).
+- **options:** n/a.
+- **evidence:** run 39349488423 on headSha `dd2b259528181f128d449be0c738b81f11add86e`, conclusion `success`, from 2026-10-20 03:45 to 04:06 UTC+3. Jobs `test (3.11)`, `test (3.12)` and `test (3.13)` all passed. `gh run view --job <id> --log` gave the following.
+  - **All three Pythons (3.11.17, 3.12.15, 3.13.16):**
+    - `Ran 174 tests ... OK`
+    - `RESEARCH_ADVERSARIAL cases=16 violations=0`
+    - `BRANCH_CLOSED passes=5 stale=3 metric=p50_ms best=30.0 reason=no_superior_candidate_in_3_consecutive_passes refused_pass_fetches=0`
+    - `RESEARCH_REPORT ... claims=15 unknown=4 citations=15 identical_runs=2`
+    - `MEMORY_SEARCH_MODE=fts5`
+    - `POISONED_MEMORY ... dangerous_executions=0`
+    - Prior sets unchanged: ADVERSARIAL 20/0, ORCH 18/0, TOOL 20/0, SANDBOX 21/0, EGRESS 26/0 (22 of 22 audited), MEMORY 15/0
+    - `FORK_BOMB ... left=0`
+    - `no leaked worker processes`
+  - **Python 3.13 only:**
+    - `MUTATION mutants=94 killed=94`
+    - `BENCH research_pass n=50 p50_ms=77.247 p95_ms=80.195`
+    - `BENCH research_report n=50 p50_ms=4.631`
+    - `BENCH browser_fetch p50_ms=57.737`
+    - `BENCH execute p50_ms=1.600`
+- **selected:** cycle-007 metric met in CI. PR #7 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0009 gaps stand.
+- **reversal criteria:** any later red run on this branch.
