@@ -198,3 +198,17 @@
   - A `python -m control_plane status` entry point (would couple the CP to scheduler, memory and research imports).
 - **evidence:** D-0025; `ECON_ADVERSARIAL` case `forged_revenue_via_db` failed against the per-row design and passes against the final one.
 - **reversal criteria:** a multi-process deployment (then add a cross-process race test and restore the mutant).
+
+## R-0017: Outreach designs not chosen (cycle-010)
+- **decision_id:** R-0017
+- **date:** 2026-10-20
+- **problem:** Record the alternatives rejected in D-0026 and D-0027.
+- **options / rejected:**
+  - Committing real lead CSVs to the repo (third-party contact data in git history). Only synthetic `example.invalid` fixtures are committed.
+  - Model-written drafts (can invent facts).
+  - Using the source CSV's `fit_score` (untrusted, unexplained).
+  - Storing the `+tag`-stripped address as the recipient (would change who receives mail). It is used only for keys and caps.
+  - Mode in the operation id only (a dry run in a dry deployment would consume the live op id).
+  - An `approve` CLI (would let any process with box access mint tokens). Tokens are minted only by the approval authority holder, outside this cycle.
+  - Wiring Gmail, Agentmail or WhatsApp transports (forbidden by the user this cycle).
+- **reversal criteria:** the user explicitly authorizes a real transport, with its own cycle and tests.

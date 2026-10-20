@@ -729,3 +729,103 @@
   - Caps bound **configured estimates**, not billed spend.
   - An unpriced capability is denied under any USD cap. That fails closed, but every capability needs a price before USD caps are turned on.
 - **reversal criteria:** a cap is exceeded, a number is fabricated, or a tampered ledger is accepted.
+
+## D-0026: cycle-010 definition (ZAIPOS governed lead + outreach workflow), recorded before work
+- **decision_id:** D-0026
+- **date:** 2026-10-20
+- **problem:**
+  - The user selected a ZAIPOS lead and outreach workflow for cycle-010, with the user's approval on every send.
+  - Prior outreach happened outside the repo (`/workspace/income`, `/workspace/omega`), so nothing governed it:
+    - no dedupe across sources;
+    - no evidence-backed scoring;
+    - no machine-enforced approval, caps, suppression or idempotency;
+    - no outcome tracking.
+  - RM-0011 forbids live money; outreach is risk-3 communication, not money movement.
+- **inputs (read-only, untrusted data):**
+  - `/workspace/income/pipeline.csv` (sha256 `a083b511…`, 21 rows);
+  - `/workspace/omega/bh_leads_all.csv` (`e5ea2c4c…`, 79 rows);
+  - `/workspace/omega/bh_leads_top.csv` (`6ec238f4…`, 30 rows, a subset);
+  - `revops_report.md` (`b76bc225…`): the operating limits (≤ 4 sends/day, honour "no thanks", stop after 2 touches) and the offer facts (free 30-day pilot, then BHD 12/branch/month);
+  - pitch files (`email_pitches_*`, `cafe_pitches.md`), used only as evidence of prior contact, never as template text that is executed.
+- **options:**
+  - Fixtures: (f1) commit the real lead CSVs to the repo; (f2) copy the real inputs to `/workspace/outreach_fixtures/` outside git with a sha256 manifest, run the pipeline on them from there, and commit only synthetic fixtures (including injection cases) for tests and CI.
+  - Drafting: (t1) a model writes drafts; (t2) repo-owned templates, where every personalization slot is filled only from a named source field, the slot→field→source mapping is stored with the draft, and a clause is omitted when its field is missing. No model is used.
+  - Send authorization: (a1) a queue flag; (a2) `cap.outreach.send` registered at risk 3 (IRREVERSIBLE), so the ControlPlane requires an HMAC approval token bound to actor, capability, operation id and args. The args are exactly `{draft_id, draft_hash, recipient, channel}`, and `draft_hash` = sha256 over the canonical (channel, recipient, subject, body). At send time the handler re-reads the MAC'd draft and recomputes the hash, so editing a draft after approval is refused.
+  - Transport: (x1) wire a connector; (x2) `DenyTransport` by default plus `dry_run=True` by default; only `MockTransport` exists in code. No connector is wired.
+- **selected:** f2, t2, a2, x2.
+  - **Queue:** SQLite, MAC over draft content. Every draft is inserted as `pending_approval`. States: `pending_approval → sent | suppressed | rejected | failed`. `sends.draft_id` is UNIQUE, plus CP idempotency on `operation_id = outreach:<draft_id>`, so no double send.
+  - **Caps:** per recipient (lifetime touches ≤ 2, ≤ 1 per day) and per UTC day (≤ 4). They are enforced in the send handler in one transaction, with recipients normalized (case, whitespace, `+tag`, trailing dot) so splitting cannot evade them. Economics `Caps(day_calls)` are an optional second layer.
+  - **Suppression/opt-out:** from pipeline statuses `BOUNCED` and `CLOSED_NO_REPLY` (2 touches), and from tracker opt-outs. Checked at draft time and again at send time.
+  - **Economics:** the CP records the economics row of every send attempt that executes (cycle-009).
+  - **Tracker:** reply state and outcome default to UNKNOWN. Revenue stays UNKNOWN and refuses numbers until verified (no reconciler; RM-0011).
+  - **CLI:** `python -m outreach build|export` writes pending drafts as JSONL plus Markdown for review.
+- **cycle definition:**
+  - cycle_id: `cycle-010-outreach`
+  - objective: a governed, evidence-backed ZAIPOS lead → draft → approval-gated outbound pipeline that cannot send without a human token, with a mock transport only.
+  - capability areas: `cap.outreach.leads`, `cap.outreach.drafts`, `cap.outreach.send` (risk 3), `cap.outreach.tracker`
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-10/outreach`, one PR; **production code ≤ 700 new lines**; stdlib only; no network; **0 real sends**.
+  - success metric (locally and in CI):
+    1. 100% of tests pass on 3.11, 3.12 and 3.13.
+    2. Every generated draft is `pending_approval`. Every personalized slot maps to a source field, and draft text holds no lead fact absent from the source.
+    3. An outreach adversarial set (≥ 10 cases) gives 0 violations:
+       - send without approval;
+       - token reused for another draft, recipient or channel;
+       - draft tampered after approval;
+       - suppressed or opted-out recipient;
+       - cap evasion by splitting (multiple drafts, recipient case/+tag variants, day boundary);
+       - prompt injection in lead fields;
+       - double send / replay;
+       - transport default deny and dry run;
+       - revenue forged in the tracker.
+    4. The real-data run produces N drafts, reported as counts only, with 0 transport calls.
+    5. Prior adversarial sets, the cross-check and the status CI are unchanged.
+    6. Every new mutant is killed in the sharded mutation check.
+  - expected_value: medium (unblocks approved ZAIPOS outreach at ≤ 4/day).
+  - estimated_cost: ESTIMATE one agent session; dollar cost UNKNOWN.
+  - expected_revenue: UNKNOWN (revops target ≥ BHD 12 by 2026-11-30 is a goal, not evidence).
+  - risk: medium (outbound communication; mitigated by risk-3 approval and the mock transport).
+  - confidence: medium.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:**
+  - f1: puts third-party contact data in git history.
+  - t1: can invent facts about a lead.
+  - a1: bypassable.
+  - x1: the user forbade sending.
+- **reversal criteria:** any send without a valid token, any invented lead fact, or any cap or suppression bypass.
+
+## D-0027: cycle-010 implementation choices and real-data run
+- **decision_id:** D-0027
+- **date:** 2026-10-20
+- **problem:** Concrete choices made while implementing D-0026, and the evidence from the real-data run.
+- **selected:**
+  - **Package:** `src/outreach/` with `leads.py` (ingest, clean, dedupe, rules), `drafts.py` (templates), `store.py` (outbox, suppression, sends, outcomes), `handlers.py` (capabilities, transports, caps), `pipeline.py` (runtime, build, export, CLI).
+  - **Ingest:**
+    - Only whitelisted columns are read. Control, bidi and zero-width characters are replaced and length is capped.
+    - The recipient keeps its original spelling when valid. `norm_email` (lowercase, `+tag` stripped, trailing dot) is used only for dedupe keys, caps and suppression.
+    - Dedupe is union-find over email, phone digits (≥ 7) and normalized name. A field conflict keeps the first source and is recorded with both provenances.
+    - Pipeline `status` and `touches` always come from `pipeline.csv`.
+  - **Hold rule:** the slot fields `name` and `area` must be letters or digits (any script) plus `&'’.,-()°/#+!`, and must not match the instruction/markup/URL pattern. Otherwise the lead is held and never drafted. `category` enters text only through a fixed phrase map.
+  - **Scoring:** 7 rules (email +3, phone +1, food service +2, multi-branch +2, live website +1, social-only +1, hours +1; max 11). The source CSV's `fit_score` is ignored as untrusted. Each rule hit records field, value and provenance.
+  - **Templates:** `zaipos_email_v1` with an opt-out line ("reply stop"). Offer terms come from `revops_report.md` (free setup, 30 days, BHD 12/branch/month). The signature is the name only.
+  - **Send args:** `{draft_id, draft_hash, recipient, channel, mode}`.
+    - `mode` is in the signed args, so a dry-run token cannot authorize a live send.
+    - The operation id is `outreach:<mode>:<draft>:<attempt>`. A new attempt never re-sends, because the `sends` PRIMARY KEY and the `pending_approval` state check enforce at-most-once.
+    - `OutreachContext.dry_run=True` forces dry even for `mode=live` and reports `forced`.
+  - **Runtime:** `open_runtime` wires DenyTransport and dry-run. No real transport class exists, and no connector is wired.
+    - The ControlPlane is built with `require_host_hardening=False` for CLI use (deviation; S-0012 gap 6).
+    - Keys are generated 0600 in the state dir.
+  - **Real data:**
+    - Copies are in `/workspace/outreach_fixtures/` (outside git, `MANIFEST.sha256`; the originals still verify byte-identical after the run).
+    - The state is in `/workspace/outreach_state/` (outside git).
+- **evidence (counts only, no PII):**
+  - Real build: `records=130 leads=94 merged=36 suppressed=7 prior_pending=10 no_email=68 held=0 drafts_created=9 pending_approval=9`.
+  - Re-run: `drafts_existing=9 drafts_created=0` (idempotent).
+  - Export: `exported_pending=9`.
+  - Outbox: `pending_approval=9`, `sends=0`. Suppression rows: `bounced=1`, `closed_no_reply_after_2_touches=4` (2 suppressed leads had no email).
+  - Audit: `execute_begin=9` (all `cap.outreach.enqueue`), `outreach_sent=0`, `outreach_dry_run=0`.
+  - `REAL_DRAFTS reproducible_from_source_slots 9 violations 0`.
+- **rejected:** see R-0017.
+- **tradeoffs:**
+  - Most real leads (68/94) have no public email and get no draft. WhatsApp and walk-in channels are not modelled.
+  - Name-key dedupe can merge two different businesses that share a name.
+- **reversal criteria:** any invented fact, or any send path without a token.

@@ -451,3 +451,25 @@
 - **rejected:** merging in-cycle.
 - **tradeoffs:** S-0011 gaps stand. The CI overhead of about 2.2 ms per governed op is under the B-0017 5 ms reversal bound.
 - **reversal criteria:** any later red run on this branch.
+
+## I-0026: cycle-010 CI result on PR #10
+- **decision_id:** I-0026
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-010 (D-0026 required this).
+- **options:** n/a.
+- **evidence:** run 39388161433 on headSha `36f00e15df8eec42980d2d522039927b5e08bf23`, conclusion `success`, from 2026-10-20 10:41 to 11:00 UTC+3. Jobs, all `success`: `test (3.11, 0/3)` 17m24s, `test (3.12, 1/3)` 17m02s, `test (3.13, 2/3)` 19m03s. `gh run view --job <id> --log` gave the following.
+  - **All three jobs:**
+    - `Ran 217 tests ... OK`
+    - `OUTREACH_ADVERSARIAL cases=15 violations=0`
+    - `OUTREACH_CLI pending=8 exported_jsonl=8 sends=0` (synthetic fixtures)
+    - `ECON_ADVERSARIAL cases=16 violations=0`, `STATUS_CI ok=True`, `CROSSCHECK tampers=6 detected=6 failures=[]`, `SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1`
+    - `no leaked worker processes`
+  - **Mutation shards:** `MUTATION mutants=57 killed=57 shard=0/3`, `57/57 shard=1/3`, `57/57 shard=2/3`, each `total_defined=171`, i.e. 171/171.
+  - **3.13 bench:** `BENCH econ_execute ... overhead_p50_ms=2.261`.
+  - **Real-data run (local only; no PII in the repo):** 9 drafts `pending_approval`, 0 sends (D-0027).
+- **selected:** cycle-010 metric met in CI. PR #10 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:**
+  - S-0012 gaps stand.
+  - The slowest job (19m03s) is the longest yet. With more mutants, a 4th shard may be needed (the trigger is UNKNOWN; propose above 25 min).
+- **reversal criteria:** any later red run on this branch.
