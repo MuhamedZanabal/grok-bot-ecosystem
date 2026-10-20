@@ -507,3 +507,79 @@
   - A redirect-only source can never be evaluated. An operator must register the final URL.
   - Research writes take 3 capabilities plus `cap.memory.get`, i.e. more ControlPlane round trips (B-0013).
 - **reversal criteria:** a legitimate research workflow is blocked by the redirect or dedup rule (then add an explicit, audited alias transition).
+
+## D-0022: cycle-008 definition (evidence hardening + workflow scheduler), recorded before code
+- **decision_id:** D-0022
+- **date:** 2026-10-20
+- **problem:** RM-0009 and the user's request for cycle-008.
+  - The claim ledger is not MAC'd, so claim deletion or edits are undetectable (S-0009 gap 1).
+  - Memory and claim stores are not cross-checked against audit anchors (S-0008 gaps 2-3).
+  - There is no way to run work on a schedule without the same work running twice, escaping policy, or ignoring the kill switch.
+- **options:**
+  - Ledger integrity: (l1) per-row unkeyed hash; (l2) an HMAC chain like memory (seq, prev_mac, mac), with each claim's (seq, mac) anchored in the audit log.
+  - Cross-check: (c1) manual; (c2) `integrity.crosscheck`, which verifies the audit chain and then requires that every anchored (seq, mac) is present and identical in the store, that every store row is anchored, and that store heads match. It runs in tests and as a CI step.
+  - Job execution: (j1) the scheduler calls handlers directly; (j2) every step is a `ControlPlane.execute` as the job's actor, with `operation_id = job:<job_id>:<slot>:<step>`. The CP idempotency ledger then makes a (job, slot) step execute at most once, even across a crash or restart. A crash inside a step leaves it `in_doubt`, never retried.
+  - Slot claim: (k1) in memory; (k2) `INSERT OR IGNORE` on `runs(job_id, slot)` primary key plus a lease (`owner`, `lease_until`) in SQLite.
+  - Privilege: (p1) jobs as a capability callable by agents; (p2) jobs defined only through the host operator API `Scheduler.define`, with refusals:
+    - the actor lacks a grant for a step;
+    - a step's risk is above LOCAL_WRITE (no unattended approvals);
+    - a step targets `cap.scheduler.*`;
+    - a step carries extra keys such as an actor or approval token.
+
+    Job rows are MAC'd (a tampered actor, step or budget quarantines the job), and policy is re-checked at every run by the CP.
+  - Mutation wall time: (s1) keep everything on 3.13 (21m37s in run 39351689327 at 94 mutants; about 26 min projected); (s2) shard mutants `i/3` across the 3 matrix jobs (`MUTANT_SHARD`), each job asserting its own shard count. All 3 jobs are required, so the union is complete.
+- **evidence:**
+  - `executor.py`: `_from_prior` returns REPLAYED for SUCCEEDED, IN_DOUBT for PENDING. A `BaseException` from a handler escapes `_run` (`except Exception`) and leaves the ledger PENDING, which faithfully simulates a crash.
+  - `OPERATION_ID` is `^[A-Za-z0-9._:-]{8,128}$`.
+  - `LoopGovernor(budget, kill, clock)` checks the kill switch, iterations, wall time and cost before each unit.
+- **selected:** l2, c2, j2, k2, p2, s2.
+  - **Schedules:** `interval` (every_s, anchor) or 5-field cron (UTC; `*`, lists, ranges, `*/n`).
+  - **Missed slots:**
+    - `skip` runs only the latest due slot and records the others as `skipped_missed`;
+    - `catch_up` runs at most `catch_up_max` of the most recent missed slots, oldest first, and records the rest as `skipped_missed`.
+  - **Concurrency:** a global `max_concurrent` counts live leases, and slots beyond it stay unclaimed (deferred, not lost). Per job, an overlapping slot while a live lease exists is recorded as `skipped_overlap`.
+  - **Per-run budget:** a run is a `LoopGovernor` with `max_steps`, `max_wall_s` and `max_cost` on an injectable monotonic clock.
+  - **Kill switch:** an engaged kill switch halts `tick` (audited); a run killed mid-way ends `killed`.
+  - **Backwards clock:** a per-job high-water mark means slots ≤ the last scheduled slot never re-run. A backwards jump larger than tolerance is audited as `clock_backwards`, and no new slot is claimed until wall time passes the high-water mark.
+  - **Crash recovery:** expired leases are re-driven with the same operation ids. Finished steps replay, PENDING steps become `in_doubt`, and steps that never began execute once.
+  - **Clocks:** both wall and monotonic clocks are injectable.
+- **cycle definition:**
+  - cycle_id: `cycle-008-scheduler`
+  - objective: a tamper-evident claim ledger, an automated audit-anchor cross-check in CI, and a persistent, exactly-once-per-slot, policy-bounded scheduler.
+  - capability areas: `cap.research.evidence` (hardening), `cap.workflow.scheduler`
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-8/scheduler`, one PR; **production code ≤ 700 new lines** (hardening ≤ 150, scheduler ≤ 550); stdlib only; no network.
+  - success metric (locally and in CI):
+    1. 100% of tests pass, with no skips, on 3.11, 3.12 and 3.13.
+    2. Claim edits, deletions (middle and tail), forged inserts and memory tail truncation are each detected by the chain and/or the audit cross-check. Affected claims report as `UNKNOWN`.
+    3. A CI step runs the cross-check on a real research run: clean is OK, and each injected tamper is detected (`CROSSCHECK ...`).
+    4. A scheduler adversarial set (≥ 12 cases) gives 0 violations, and no (job, slot, step) handler effect ever happens twice. Cases:
+       - duplicate slot (2 instances);
+       - restart storm (≥ 50 restarts);
+       - self-scheduling or escalation (ungranted, high-risk, scheduler-cap, extra-key, tampered job row, grant revoked);
+       - backwards clock;
+       - kill switch mid-run;
+       - crash mid-step and crash between steps;
+       - overlap;
+       - concurrency limit;
+       - skip and catch-up caps;
+       - run budget.
+    5. Prior adversarial sets are unchanged.
+    6. Every new mutant is killed. The slowest CI job's wall time is below the 21m37s of run 39351689327.
+  - expected_value: medium-high (unattended work, bounded).
+  - estimated_cost: ESTIMATE one agent session; token and dollar cost UNKNOWN.
+  - expected_revenue: 0.
+  - risk: medium (new host TCB, plus concurrency).
+  - confidence: medium.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:**
+  - l1: recomputable by anyone with DB write access.
+  - c1: not automated.
+  - j1: bypasses policy, idempotency and audit.
+  - k1: lost on restart.
+  - p1: CP handlers do not see the calling actor, so job ownership could not be bound safely.
+  - s1: CI wall time.
+- **tradeoffs:**
+  - An `in_doubt` step needs an operator; it is never auto-retried.
+  - Cron is UTC only, with no DST semantics.
+  - Mutation results are spread across Python versions.
+- **reversal criteria:** any double execution, escalation, or violation.
