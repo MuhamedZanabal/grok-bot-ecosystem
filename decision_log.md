@@ -611,3 +611,71 @@
   - A mutant's kill is now observed under one Python version only.
   - A shard's wall time depends on which mutants land in it.
 - **reversal criteria:** a mutant that survives only on some Python version, or a shard job above 20 min.
+
+## D-0024: cycle-009 definition (observability + cost accounting), recorded before code
+- **decision_id:** D-0024
+- **date:** 2026-10-20
+- **problem:** RM-0010 and the user's request for cycle-009.
+  - No governed operation has metered cost. `estimated_cost` and `measured_cost_usd` are UNKNOWN in every cycle so far (`ecosystem_manifest.json#economics`).
+  - Spend is bounded only per process (`LoopGovernor`). Nothing caps spend per run, per job or per day across restarts.
+  - Operators get no alert for `in_doubt` runs, quarantined jobs or skipped gaps (S-0010 gap 3).
+  - No metrics export exists.
+- **options:**
+  - Ledger: (e1) extra columns on the CP idempotency ledger; (e2) a separate `EconomicsLedger` (SQLite), HMAC-chained like claims (seq, prev_mac, mac), with each row's (seq, mac) anchored in the audit log and covered by `integrity.crosscheck`.
+  - Numbers: (n1) floats with 0 as the default; (n2) every number is a typed `Quantity {value, provenance, unit, source}`, where provenance is one of `measured | configured_estimate | unknown`.
+    - `unknown` holds exactly when `value is null`. Arithmetic over any unknown yields unknown; nothing is coerced to 0.
+    - `actual_*` fields accept only `measured` or `unknown`.
+    - USD derived from measured usage × a configured price is `configured_estimate`, never `measured`. There is no billing API.
+  - Revenue: (r1) accept caller-supplied `actual_revenue`; (r2) `actual_revenue` is `measured` only via a registered reconciler. None exists in this cycle, so it is always `unknown`, and any attempt to set it is refused and audited.
+  - Metering: (m1) handler self-report; (m2) host-side measurement.
+    - Wall time via `perf_counter` around the handler, and the tool-call count, measured by the CP.
+    - Egress bytes from the proxy's own `egress_closed` events (host-side), via an audit listener.
+    - Model calls and tokens via the provider's `last_usage` when present, else tokens `unknown`.
+  - Guards: (g1) post-hoc alerts; (g2) pre-execution policy in `ControlPlane.execute`.
+    - Before `ledger.begin`, the guard reserves the configured per-call cost estimate in one `BEGIN IMMEDIATE` transaction, after checking cumulative caps: per-day per actor, per-day global, per-run and per-job, in both USD and call count.
+    - If a USD cap applies and the capability's price is UNKNOWN, the call is denied (`budget:cost_unknown`).
+    - Caps are cumulative and persisted, so splitting a call or restarting does not reset them.
+  - Dry run: a request field `dry_run: true` runs every check (validation, kill switch, policy, schema, approval, rate, budget) and returns `dry_run` with the cost estimate, without reserving, beginning a ledger entry or running the handler.
+  - Status report: (o1) ad-hoc SQL; (o2) `python -m economics status --config <json>` emitting JSON or Markdown, read-only. It reports:
+    - kill-switch state;
+    - scheduler `in_doubt` runs, quarantined jobs (MAC failure), skipped gaps and live leases;
+    - budget burn per day vs caps, plus unknown counts;
+    - cross-check results for every store.
+  - Export: JSONL of ledger entries and of the status report, with every string passed through `redact`.
+- **selected:** e2, n2, r2, m2, g2, dry run, o2, JSONL export.
+- **cycle definition:**
+  - cycle_id: `cycle-009-economics`
+  - objective: persistent, tamper-evident economic telemetry for every governed operation, plus pre-execution spend caps, an operator status report and a redacted metrics export.
+  - capability areas: `cap.economics.ledger`, `cap.economics.budget_guard`, `cap.observability.status`
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-9/economics`, one PR; **production code ≤ 650 new lines**; stdlib only; no network.
+  - success metric (locally and in CI):
+    1. 100% of tests pass, with no skips, on 3.11, 3.12 and 3.13.
+    2. Every governed operation that reaches execution (executed, failed or timed out) has exactly one MAC'd, audit-anchored economics row, holding all 7 fields and a provenance for each.
+    3. An economics adversarial set (≥ 10 cases) gives 0 violations:
+       - spend-cap bypass by splitting, by many run ids and by restart;
+       - forged `actual_revenue` via args, API and DB edit;
+       - UNKNOWN coerced to 0 (sum, cap and report);
+       - ledger tamper (edit, delete, forged insert) detected by chain and cross-check;
+       - secrets in metrics or export;
+       - dry run with no side effects;
+       - unknown price under a cap.
+    4. The status report lists a seeded `in_doubt` run, a quarantined job, skipped gaps, the kill switch, burn and a failed cross-check, in both JSON and Markdown.
+    5. Prior adversarial sets are unchanged.
+    6. Every new mutant is killed, with sharding kept. The slowest CI job is ≤ 18m21s + 3 min.
+  - expected_value: high (a prerequisite for any revenue cycle).
+  - estimated_cost: ESTIMATE one agent session; token and dollar cost UNKNOWN.
+  - expected_revenue: 0.
+  - risk: medium (new code on the CP hot path).
+  - confidence: medium.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:**
+  - e1: mixes integrity domains, and the idempotency ledger is not MAC'd.
+  - n1: silently fabricates zeros.
+  - r1: forgeable.
+  - m1: workers are untrusted.
+  - g1: spends before denying.
+  - o1: not operator-usable.
+- **tradeoffs:**
+  - Reservation uses the configured estimate, so caps bound estimated spend, not billed spend (still UNKNOWN).
+  - A reservation can leak (over-count) when `ledger.begin` loses a race. That errs safe.
+- **reversal criteria:** any cap bypass, fabricated number, or unanchored row.
