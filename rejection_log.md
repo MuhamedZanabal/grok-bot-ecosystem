@@ -139,3 +139,17 @@
 - **rejected:** b1 and b2 for this cycle. No in-scope capability needs JavaScript, and the stdlib-only preference applies.
 - **tradeoffs:** JS-dependent sites return their pre-render HTML only.
 - **reversal criteria:** see D-0015.
+
+## R-0013: Memory designs not chosen (cycle-006)
+- **decision_id:** R-0013
+- **date:** 2026-10-20
+- **problem:** Alternatives in D-0018.
+- **options / evidence:**
+  - **JSONL store:** no index and no atomic dedup.
+  - **Unkeyed per-record SHA-256:** recomputable by anyone with DB write access. The `_tamper_rehash` case shows a rehashed forgery is caught only because the MAC is keyed (`reason mac_mismatch`).
+  - **A sandboxed memory worker:** workers cannot reach host files by design (S-0006); a DB channel into the sandbox would widen worker reach.
+  - **An embedding/vector index:** needs a model or third-party dependency (stdlib-only rule) and no in-scope capability needs semantic recall.
+- **selected:** D-0018.
+- **rejected:** the above.
+- **tradeoffs:** lexical (FTS5/BM25) recall only.
+- **reversal criteria:** a research cycle shows lexical recall is insufficient (measured) → evaluate an embedding index as a deferred, audited dependency.

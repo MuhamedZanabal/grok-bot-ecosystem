@@ -66,6 +66,21 @@ MUTANTS=(
   "egress_entry_validation_off|tools/subprocess_handler.py|s/if not valid_entry(entry):/if False:/"
   "egress_low_risk_ok|tools/registry.py|s/if worker.egress and spec.risk < RiskLevel.EXTERNAL:/if False:/"
   "nproc_limit_removed|tools/worker.py|s/resource.setrlimit(resource.RLIMIT_NPROC, (max_procs, max_procs))/pass/"
+  # Cycle 6 (cycle-006-memory)
+  "memory_capability_writes_trusted|memory/handlers.py|s/trust=\"untrusted\",  # never from args/trust=\"operator\",/"
+  "memory_skip_redaction|memory/store.py|s/content, redactions = redact_text(content)/redactions = 0/"
+  "memory_skip_mac_verify|memory/store.py|s/if not hmac.compare_digest(self._mac(row), row\[\"mac\"\]):/if False:/"
+  "memory_skip_content_hash_verify|memory/store.py|s/if not row\[\"purged\"\] and hashlib/if False and hashlib/"
+  "memory_skip_dedup|memory/store.py|s/if existing is not None:/if False:/"
+  "memory_skip_record_budget|memory/store.py|s/if len(content.encode()) > self.budget.max_record_bytes:/if False:/"
+  "memory_skip_store_budget|memory/store.py|s/if total + nbytes > self.budget.max_total_bytes:/if False:/"
+  "memory_skip_count_budget|memory/store.py|s/if live + 1 > self.budget.max_records:/if False:/"
+  "memory_ignore_expiry|memory/store.py|s/r.expires_at > ?/r.expires_at > ? - 1e12/g"
+  "memory_url_secret_ok|memory/store.py|s/if contains_secret(origin_url):/if False:/"
+  "memory_chain_check_off|memory/store.py|s/if row\[\"prev_mac\"\] != prev:/if False:/"
+  "memory_fts_raw_query|memory/store.py|s/q = self._fts_query(query)/q = query/"
+  "memory_results_unlabelled|memory/store.py|s/\"type\": \"untrusted_data\", \"trust\"/\"type\": \"data\", \"trust\"/"
+  "memory_audit_anchor_off|memory/handlers.py|s/self._audit.append(\"memory_write\", /(lambda *a, **k: None)(\"memory_write\", /"
 )
 fail=0; killed=0; ran=0
 ONLY="${MUTANT_ONLY:-}"  # optional regex for local iteration; CI runs all

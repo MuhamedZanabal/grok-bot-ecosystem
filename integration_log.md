@@ -246,3 +246,62 @@
 - **rejected:** n/a.
 - **tradeoffs:** CI still depends on the AppArmor relaxation (D-0013).
 - **reversal criteria:** any later CI failure on this branch reopens the cycle.
+
+## I-0016: PR #5 (cycle-005) merged
+- **decision_id:** I-0016
+- **date:** 2026-10-20
+- **problem:** Merge cycle-005 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 5` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39339865437 on head `8ca78c2`).
+  - `gh pr merge 5 --merge --match-head-commit 8ca78c21420b55258cfdf81b8644f3d2a0d126f1`.
+  - `gh pr view 5` gave `MERGED`, `mergeCommit 8e30c65c430d36281a5b8ba8e4cf4cedee1ddfb9`, `mergedAt 2026-10-19T23:20:30Z` (2026-10-20 02:20 UTC+3).
+- **selected:** main = `8e30c65`, the baseline for cycle-006.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.
+
+## I-0017: cycle-006-memory integrated on branch `cycle-6/memory`
+- **decision_id:** I-0017
+- **date:** 2026-10-20
+- **problem:** Integrate D-0018 scope.
+- **options:** D-0018, D-0019, R-0013.
+- **evidence:**
+  - **New code:** `src/memory/{store,handlers,ingest,__init__}.py` (386 lines). `control_plane` gains `TrustedHostHandler`, `audit.redact_text` and `contains_secret` (+27 lines). About 413 production lines, within the ≤600 budget. Stdlib only.
+  - **Tests:** `python3 -m unittest discover -s tests -t .` gave `Ran 161 tests ... OK` on 3.13.5, uv 3.11 and uv 3.12; `MEMORY_SEARCH_MODE=fts5`.
+  - **Memory adversarial output:** `MEMORY_ADVERSARIAL cases=15 violations=0`; `POISONED_MEMORY ... dangerous_executions=0 trusted_records=0 state=completed`.
+  - **Browser wiring:** `MEMORY_FROM_FETCH {"origin_url": "http://127.0.0.1:<port>/page?q=fox&n=2", "source_id": "cap.browser.fetch", "source_ref": "op-fetch-mem-01", ...}`; re-ingesting gives `replayed`.
+  - **Prior sets:** 20/0, 18/0, 20/0, 21/0 and 26/0 are unchanged.
+  - **Mutation:** `bash scripts/mutation_check.sh` gave `MUTATION mutants=68 killed=68`, `exit=0`, `elapsed=620s`.
+  - **Cleanup:** `pgrep -fa "worker.py|sleep 35|mutation_check"` gave none.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** S-0008.
+- **reversal criteria:** any CI failure or violation.
+
+## I-0018: cycle-006 CI result on PR #6
+- **decision_id:** I-0018
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-006 (D-0018 required this).
+- **options:** n/a.
+- **evidence:** `gh pr checks 6` gave `test (3.11) pass 56s`, `test (3.12) pass 50s` and `test (3.13) pass 12m12s`. Run 39342990292 ran on headSha `9dd159aa67ac4138da5dcb266c228f3d0daa1d60` with conclusion `success`, from 2026-10-20 02:40 to 02:52 UTC+3. `gh run view --job <id> --log` gave the following.
+  - **All three Pythons (3.11.17, 3.12.15, 3.13.16):**
+    - `Ran 161 tests ... OK`
+    - `MEMORY_SEARCH_MODE=fts5 fts5_available=True`
+    - `MEMORY_ADVERSARIAL cases=15 violations=0`
+    - `POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied', 'denied', 'denied', 'rejected', 'denied'] dangerous_executions=0 trusted_records=0 state=completed`
+    - `EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True`
+    - `FORK_BOMB ... left=0`
+    - SANDBOX 21/0, TOOL 20/0, ORCH 18/0
+    - `no leaked worker processes`
+  - **Python 3.13 only:**
+    - `MUTATION mutants=68 killed=68`
+    - `BENCH memory_write n=200 p50_ms=3.350 p95_ms=4.434 mode=fts5`
+    - `BENCH memory_search n=200 p50_ms=2.066 p95_ms=2.865`
+    - `BENCH execute p50_ms=1.781`
+    - `BENCH browser_fetch p50_ms=58.464`
+    - `BENCH tool_execute_subprocess p50_ms=36.874`
+- **selected:** cycle-006 metric met in CI; PR #6 left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0008 gaps stand. The runner kernel version is still UNKNOWN.
+- **reversal criteria:** any later red run on this branch.

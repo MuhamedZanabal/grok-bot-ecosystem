@@ -66,3 +66,4 @@ jobs:
           python bench/bench_orchestrator.py 100
           python bench/bench_tools.py 50
           python bench/bench_browser.py 30
+          python bench/bench_memory.py 200

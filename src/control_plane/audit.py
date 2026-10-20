@@ -42,6 +42,15 @@ def redact(value: Any) -> Any:
     return value
 
 
+def redact_text(value: str) -> tuple[str, int]:
+    """Mask known credential shapes inside free text; returns (text, number_of_redactions)."""
+    return _SECRET_VALUE.subn(REDACTED, value)
+
+
+def contains_secret(value: str) -> bool:
+    return _SECRET_VALUE.search(value) is not None
+
+
 def _digest(prev_hash: str, record: dict) -> str:
     return hashlib.sha256((prev_hash + canonical_json(record)).encode("utf-8")).hexdigest()
 

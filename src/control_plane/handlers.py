@@ -17,6 +17,19 @@ class IsolatedHandler:
         raise NotImplementedError
 
 
+class TrustedHostHandler:
+    """Marker base class for repository-owned handlers that run in the host process and
+    execute NO tool- or model-supplied code (e.g. the memory store). They are part of the
+    TCB, bound by default, and audited at bind with isolation="trusted_host" (D-0018)."""
+
+    __slots__ = ()
+    isolated = False
+    isolation = "trusted_host"
+
+    def __call__(self, args: dict):  # pragma: no cover - abstract
+        raise NotImplementedError
+
+
 class HandlerTimeout(Exception):
     """Raised by an isolated handler after it has killed a worker that exceeded its deadline."""
 
