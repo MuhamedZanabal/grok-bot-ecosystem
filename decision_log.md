@@ -679,3 +679,53 @@
   - Reservation uses the configured estimate, so caps bound estimated spend, not billed spend (still UNKNOWN).
   - A reservation can leak (over-count) when `ledger.begin` loses a race. That errs safe.
 - **reversal criteria:** any cap bypass, fabricated number, or unanchored row.
+
+## D-0025: cycle-009 implementation choices and deviations from D-0024
+- **decision_id:** D-0025
+- **date:** 2026-10-20
+- **problem:** Concrete choices made while implementing D-0024, and where the code differs from the definition.
+- **options / selected:**
+  - **Package:** `src/economics/` with `quantity.py` (typed numbers), `ledger.py` (`EconomicsLedger`, `Caps`, `Pricing`, guard, meter), `status.py` (report, Markdown, JSONL export, CLI).
+    - The CLI is `python -m economics status --config cfg.json [--format json|md] [--export-jsonl F]`, not `python -m control_plane status`. That keeps the control plane free of imports from scheduler, memory and research.
+  - **Hook points:**
+    - `ControlPlane(economics=...)`.
+    - New request fields `dry_run` (bool) and `budget_scope` (`{run, job}`, each matching `^[A-Za-z0-9._:-]{1,128}$`).
+    - New status `DRY_RUN`.
+    - Guard order: after policy, schema, idempotency, approval, rate limiter and governor; immediately before `ledger.begin`.
+    - The operation row is written right after `_run` returns.
+  - **Dry run (deviation):** dry run evaluates validation, kill switch, policy, handler bound, schema, prior-op replay and approval, then the spend guard **without reserving**. It does **not** evaluate the rate limiter or the governor, because both consume budget when checked. D-0024 listed "rate"; this is narrower.
+  - **`actual_cost` is a map of Quantities:**
+    - `usd`
+    - `wall_s` (host `perf_counter`, measured)
+    - `tool_calls` (measured)
+    - `egress_bytes` (sum of the proxy's own `egress_closed` events during the operation, through a new `AuditLog.listeners` hook; measured)
+    - `model_calls`
+    - for model calls, `usage_in` / `usage_out` (from provider `last_usage` when it holds valid non-negative ints, else unknown)
+
+    Keys avoid the word "token" because audit redaction masks keys matching `token`.
+  - **USD:**
+    - A tool operation's `actual_cost.usd` is `unknown` (no billing source).
+    - A model call's `usd` is `configured_estimate` = measured usage × configured token price, or `unknown`.
+    - No USD value is ever `measured`.
+  - **`risk`** is the capability's policy risk level (0-3, `configured_estimate`, source `policy.capability.risk`). **`expected_value`, `expected_revenue` and `confidence`** come from `Pricing.expected` or are `unknown`.
+  - **`actual_revenue`** is always `unknown`.
+    - `record_revenue` refuses and audits `revenue_refused`.
+    - `_put` raises `RevenueRefused` for any non-unknown revenue.
+    - `actual_*` meters cannot be `configured_estimate`, except `usd`.
+  - **Guard:**
+    - One `BEGIN IMMEDIATE` transaction under the ledger lock. Cumulative SQL `TOTAL()` over reservation rows for the day (per actor and global), the run and the job, in USD and call count.
+    - A run cap with no run scope is denied (`run_scope_required`). A job cap applies when a job scope is present; the scheduler always sets both, `{"job": id, "run": "id:slot"}`.
+    - The runner sets `{"run": run_id}` and checks model calls through the same guard (`model:<provider>` item) **before** calling the provider.
+  - **Guard integrity:**
+    - When `PRAGMA data_version` shows another connection changed the file, the guard re-verifies the whole chain plus this process's own head (seq, mac).
+    - Any failure denies with `budget:ledger_integrity`, so the guard fails closed.
+    - The first attempt checked MACs per row on every admit. It cost O(day rows) and missed edits to operation rows, which the adversarial set caught. It was replaced before commit (B-0017).
+  - **Redaction:** operation ids and scope ids are redacted before they are stored, because ids can be shaped like secrets (`op-ghp_...`). Bodies are redacted, and export re-redacts every record.
+  - **Burn:** reservations without an outcome (a crash, or `in_doubt`) count as `unknown` actual USD, never 0.
+  - **Mutants:** 28 new (146 defined), sharded as before.
+- **evidence:** `tests/test_economics.py` (15 tests); `tests/test_economics_adversarial.py` (`ECON_ADVERSARIAL cases=16 violations=0`); `MUTANT_ONLY='^econ_'` gives 28/28 killed locally (112 s); B-0017.
+- **rejected:** see R-0016.
+- **tradeoffs:**
+  - Caps bound **configured estimates**, not billed spend.
+  - An unpriced capability is denied under any USD cap. That fails closed, but every capability needs a price before USD caps are turned on.
+- **reversal criteria:** a cap is exceeded, a number is fabricated, or a tampered ledger is accepted.

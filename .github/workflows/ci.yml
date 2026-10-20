@@ -61,6 +61,8 @@ jobs:
           echo "no leaked worker processes"
       - name: Store integrity cross-check against audit anchors (clean + injected tampers, D-0022)
         run: python scripts/crosscheck_ci.py
+      - name: Operator status report CLI (every attention class seeded, D-0024)
+        run: python scripts/status_ci.py
       - name: Mutation check, shard ${{ matrix.shard }} (each disabled guard must fail the suite)
         env:
           MUTANT_SHARD: ${{ matrix.shard }}
@@ -75,3 +77,4 @@ jobs:
           python bench/bench_memory.py 200
           python bench/bench_research.py 50
           python bench/bench_scheduler.py 200
+          python bench/bench_economics.py 300

@@ -6,14 +6,14 @@ The audit log is verified first (hash chain). Then, for each store:
        and edits/rewrites by someone holding the store key;
   * every store row must be anchored -> catches forged inserts;
   * the store's own chain must verify.
-Anchors: memory_write{seq, mac} and claim_recorded{seq, mac} (created rows only).
+Anchors: memory_write, claim_recorded (created rows only), economics_recorded{seq, mac}.
 """
 
 import json
 
 from control_plane.audit import verify_chain
 
-ANCHOR_EVENTS = {"memory": "memory_write", "claims": "claim_recorded"}
+ANCHOR_EVENTS = {"memory": "memory_write", "claims": "claim_recorded", "economics": "economics_recorded"}
 
 
 def _anchors(audit_path: str) -> dict[str, dict[int, str]]:
@@ -66,6 +66,9 @@ def main(argv=None) -> int:
     if a.claims:
         from research import ClaimLedger
         stores["claims"] = ClaimLedger(a.claims, open(a.claims_key_file, "rb").read())
+    if a.economics:
+        from economics import EconomicsLedger
+        stores["economics"] = EconomicsLedger(a.economics, open(a.economics_key_file, "rb").read(), None)
     rep = crosscheck(a.audit, stores)
     print(json.dumps(rep, sort_keys=True), file=sys.stdout)
     return 0 if rep["ok"] else 1

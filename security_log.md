@@ -248,3 +248,37 @@
   7. **The unattended ceiling is LOCAL_WRITE.** A scheduled job can still do anything its actor's granted risk ≤ 1 capabilities allow.
   8. Earlier gaps carried over: S-0008 and S-0009 gaps not closed here (redaction patterns, model steering within grants, no seccomp, no branch protection, CI relaxes AppArmor userns).
 - **reversal criteria:** any violation or mutant regression blocks merge.
+
+## S-0011: cycle-009 economics, spend guard and status security posture
+- **decision_id:** S-0011
+- **date:** 2026-10-20
+- **problem:**
+  - Economic numbers must never be fabricated.
+  - Spend caps must deny before execution and survive splitting, rotation, restart and tampering.
+  - Telemetry must not leak secrets.
+- **options:** D-0024, D-0025, R-0016.
+- **evidence:** `ECON_ADVERSARIAL cases=16 violations=0`:
+  - **split bypass:** 20 tiny ops under a $0.30/day cap at $0.10 each → 3 executed;
+  - **run-id rotation:** 20 fresh run ids, run cap $0.10, day cap $0.40 → 4 executed;
+  - **restart:** a new ledger instance keeps the burn → denied;
+  - **concurrent race:** 8 threads × 5 under `day_calls=10` → exactly 10;
+  - **forged revenue via args or result:** ignored, revenue stays UNKNOWN;
+  - **forged revenue via API:** refused and audited; estimated values rejected as actual meters;
+  - **forged revenue via DB edit:** row hidden, chain and cross-check fail, guard denies `ledger_integrity`;
+  - **UNKNOWN never 0:** unpriced under a cap → `cost_unknown`; unknown sums stay UNKNOWN in totals and Markdown;
+  - **tamper:** middle delete, tail truncation (caught by audit anchors and the guard's head check), lowering reserved USD in place, and a forged insert by a key holder (flagged unanchored);
+  - **secrets:** a secret in the handler failure reason, op id and scope ids appears in neither the ledger file nor the export;
+  - **dry run:** no handler call, no rows, no ledger op, no cap consumption; still subject to caps;
+  - **model calls:** unpriced model under a USD cap → run aborted before the provider is called; malformed usage fields (negative, bool, string) → UNKNOWN.
+
+  Mutants: 28 new `econ_*`, all killed in the filtered run.
+- **remaining gaps:**
+  1. **Caps bound configured estimates, not billed spend.** There is no billing or provider invoice source, so real dollar spend is UNKNOWN, and a wrong price table under-caps.
+  2. **Egress bytes are attributed per capability** over the operation window. Concurrent operations of the *same* capability can cross-attribute bytes; the total stays exact.
+  3. **Provider `last_usage` is provider-reported.** A lying provider can under-report tokens; only shape is validated.
+  4. **Cross-process atomicity is designed but untested.** `BEGIN IMMEDIATE` is used, but no multi-process race test exists (R-0016). The `data_version` re-verification is per connection.
+  5. **The ledger MAC key lives in host memory/config** (as S-0010 gap 1). A key holder who also rewrites the audit log can forge consistently. There is no external witness.
+  6. **The status report is read-only and pull-based.** There is no push alerting.
+  7. **Revenue is unmeasurable by design** until a reconciler exists (RM-0011).
+  8. S-0010 gaps 1, 2 and 4-8 carry over. Gap 3 (no operator view of `in_doubt`) is now partially closed by the status report.
+- **reversal criteria:** any violation or mutant regression blocks merge.

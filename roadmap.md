@@ -146,3 +146,34 @@
 - **rejected:** (c) before metering.
 - **tradeoffs:** (b) deferred.
 - **reversal criteria:** the user prioritizes revenue or external anchoring.
+
+## RM-0011: After cycle-009: live-money prerequisites, stated precisely
+- **decision_id:** RM-0011
+- **date:** 2026-10-20
+- **problem:**
+  - Which revenue-cycle prerequisites does cycle-009 meet?
+  - What remains before any workflow that can move real money?
+- **evidence:** D-0024, D-0025, S-0011, and the CI result of PR #9 (I-0025).
+- **prerequisite status:**
+
+  | prerequisite | status | evidence / what is missing |
+  |---|---|---|
+  | economic telemetry (per-op expected/estimated/actual cost and revenue, risk, confidence, provenance) | **MET** (cycle-009, CI-pending until I-0025) | `EconomicsLedger`; every executed/failed/timed-out op has one MAC'd, anchored row; UNKNOWN stays explicit |
+  | spend caps before execution (per run/job/day, dry run) | **MET for configured estimates** | `Caps`; S-0011 gap 1: billed spend is not measured |
+  | billed-cost measurement | **NOT MET** | no provider billing or invoice source; USD is `configured_estimate` or `unknown` |
+  | balance guards (refuse if the balance source is below a floor or unreadable) | **NOT MET** | no balance source; no balance-read capability |
+  | exposure / drawdown limits | **NOT MET** | no position or exposure model; spend caps are not exposure limits |
+  | venue allowlist | **NOT MET** (network-level only) | egress allowlists exist per capability (cycle-005); there is no venue, counterparty or market allowlist in policy |
+  | emergency stop | **PARTIAL** | the kill switch halts the CP and scheduler (tested); there is no venue-side cancel/flatten, and it is untested against any venue |
+  | reconciliation (ledger vs venue statements) | **NOT MET** | no reconciler; `actual_revenue` is always UNKNOWN and `record_revenue` refuses |
+  | external audit witness | **NOT MET** | S-0010 gap 1 and S-0011 gap 5 |
+  | human approval for irreversible ops | **MET** (since cycle-001) | HMAC approval tokens for risk ≥ 2, bound to op, args and expiry |
+
+- **conclusion:** no live-money workflow may be proposed. Revenue cycles stay limited to risk 0-1 workflows with no money movement, with revenue UNKNOWN until a reconciler exists.
+- **options for cycle-010:**
+  - (a) a read-only balance source plus a reconciler against a **paper/mock venue only**, with venue allowlist and exposure/drawdown policy objects (the first 4 NOT MET rows, still no real money);
+  - (b) an external audit witness;
+  - (c) push alerting for the status report.
+- **selected:** recommend (a), paper venue only, then (b). The user decides.
+- **rejected:** any real-venue or real-wallet integration before (a) and (b) are evidenced. Phantom/wallet MCP tools available to the operator are explicitly out of scope for repo code.
+- **reversal criteria:** the user directs otherwise, with the risk recorded.

@@ -40,11 +40,13 @@ class ActorGateway:
         raise TypeError("ActorGateway cannot be serialized or copied")
 
     def submit(self, *, operation_id: str, capability: str, args: dict,
-               approval_token: str | None = None, cost: float = 0.0):
+               approval_token: str | None = None, cost: float = 0.0, budget_scope: dict | None = None):
         request = {"operation_id": operation_id, "actor": self._actor,
                    "capability": capability, "args": args}
         if approval_token is not None:
             request["approval_token"] = approval_token
+        if budget_scope:
+            request["budget_scope"] = budget_scope
         return self._execute(request, cost)
 
     def catalog(self) -> list[dict]:

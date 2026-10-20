@@ -183,3 +183,18 @@
 - **rejected:** the above.
 - **tradeoffs:** `in_doubt` runs need an operator.
 - **reversal criteria:** a workload that needs at-least-once semantics, together with idempotent downstream effects proven per capability.
+
+## R-0016: Economics designs not chosen (cycle-009)
+- **decision_id:** R-0016
+- **date:** 2026-10-20
+- **problem:** Record the alternatives rejected in D-0024 and D-0025.
+- **options / rejected:**
+  - Economics columns on the CP idempotency ledger (not MAC'd; mixes integrity domains).
+  - Floats defaulting to 0 (fabricates numbers).
+  - Caller- or handler-supplied `actual_revenue` (forgeable). Workers' self-reported byte counts (untrusted). Only proxy-side `egress_closed` is used.
+  - Post-hoc spend alerts instead of pre-execution denial.
+  - Per-row MAC re-verification on every admit: O(rows today), and it missed tampering of non-reservation rows. Replaced by `data_version`-triggered full verification.
+  - Mutant `econ_not_atomic` (`BEGIN IMMEDIATE` → `DEFERRED`): **retired as equivalent in-process**. The ledger's Python lock already serializes admits within one process. `BEGIN IMMEDIATE` matters only across processes, which no test exercises (S-0011 gap 4).
+  - A `python -m control_plane status` entry point (would couple the CP to scheduler, memory and research imports).
+- **evidence:** D-0025; `ECON_ADVERSARIAL` case `forged_revenue_via_db` failed against the per-row design and passes against the final one.
+- **reversal criteria:** a multi-process deployment (then add a cross-process race test and restore the mutant).

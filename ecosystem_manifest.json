@@ -1,226 +1,251 @@
 {
-  "cycle_id": "cycle-008-scheduler",
-  "head_sha": "4f573704272588621998a440e443850d47207c72 (implementation; CI-verified run 39358456324). Log-only follow-up commit recording I-0024 is verified by its own PR run.",
-  "head_sha_note": "Updated after the PR run.",
-  "baseline_sha": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8",
-  "branch": "cycle-8/scheduler",
-  "capabilities": [
-    {
-      "id": "cap.control.policy",
-      "status": "integrated",
-      "evidence": "src/control_plane/policy.py; tests/test_policy.py; python3 -m unittest discover -s tests -t . -> 'Ran 52 tests ... OK'; Cycle 2: backed by persistent GrantStore, decisions carry policy_version"
-    },
-    {
-      "id": "cap.control.approvals",
-      "status": "integrated",
-      "evidence": "src/control_plane/approvals.py; tests/test_approvals.py + tests/test_adversarial.py (10 token-attack cases blocked)"
-    },
-    {
-      "id": "cap.control.idempotency",
-      "status": "integrated",
-      "evidence": "src/control_plane/ledger.py; tests/test_idempotency.py (replay, restart, conflict, in_doubt, 8-thread duplicate -> 1 execution)"
-    },
-    {
-      "id": "cap.control.loop_governor",
-      "status": "integrated",
-      "evidence": "src/control_plane/governor.py; tests/test_governor.py (iteration/wall/cost -> cycle_aborted, sticky)"
-    },
-    {
-      "id": "cap.control.kill_switch",
-      "status": "integrated",
-      "evidence": "src/control_plane/killswitch.py; tests/test_killswitch.py (all risk levels blocked, cross-process file switch, fail-closed)"
-    },
-    {
-      "id": "cap.control.audit_log",
-      "status": "integrated",
-      "evidence": "src/control_plane/audit.py; tests/test_audit.py (redaction, hash-chain tamper/deletion detection)"
-    },
-    {
-      "id": "cap.control.rate_limit",
-      "status": "integrated",
-      "evidence": "src/control_plane/ratelimit.py; tests/test_failures.py::test_rate_limit"
-    },
-    {
-      "id": "cap.control.persistent_policy_store",
-      "status": "integrated",
-      "evidence": "src/control_plane/grant_store.py; tests/test_grant_store.py (restart persistence, monotonic versions, grant/revoke audit, risk-escalation invalidation)"
-    },
-    {
-      "id": "cap.orchestration.agent_runtime",
-      "status": "integrated",
-      "evidence": "src/orchestrator/runner.py; tests/test_runner.py (19 tests: duplicates, timeout fallback, outage, malformed, budgets, kill, approval pause/resume, in_doubt)"
-    },
-    {
-      "id": "cap.control.gateway",
-      "status": "integrated",
-      "evidence": "src/control_plane/gateway.py; tests/test_orchestrator_adversarial.py::HandlerIsolationTests. Cycle 3: test_known_gap_in_process_introspection flipped to test_gap_closed_tool_code_cannot_reach_handlers; residual pinned by test_residual_trusted_inprocess_code_can_invoke_launchers"
-    },
-    {
-      "id": "cap.orchestration.provider_interface",
-      "status": "integrated",
-      "evidence": "src/orchestrator/provider.py (str->str Protocol + deterministic MockProvider); no real provider adapter exists (UNKNOWN fit for any vendor API)"
-    },
-    {
-      "id": "cap.orchestration.proposal_parser",
-      "status": "integrated",
-      "evidence": "src/orchestrator/proposal.py; tests/test_proposal.py (13 stable malformed codes)"
-    },
-    {
-      "id": "cap.tools.typed_mcp",
-      "status": "integrated",
-      "evidence": "Composite of cap.tools.registry + cap.tools.mcp_adapter + cap.tools.handler_isolation + cap.tools.args_schema; live MCP execution NOT implemented"
-    },
-    {
-      "id": "cap.tools.handler_isolation",
-      "status": "integrated",
-      "evidence": "src/tools/subprocess_handler.py, src/tools/worker.py, src/control_plane/handlers.py, src/control_plane/hardening.py; tests/test_subprocess_handler.py (env allowlist + canary, no inherited fds, no control_plane import/gc objects, worker+child dead after timeout, rlimits, protocol forgery, host non-dumpable); since cycle-004 every worker runs in the bwrap sandbox"
-    },
-    {
-      "id": "cap.tools.args_schema",
-      "status": "integrated",
-      "evidence": "src/control_plane/schema.py; enforced in src/control_plane/executor.py before replay/approval/execution; tests/test_schema.py"
-    },
-    {
-      "id": "cap.tools.registry",
-      "status": "integrated",
-      "evidence": "src/tools/registry.py, src/tools/registry_store.py (SQLite, versioned tool_events, reload re-validates WorkerSpec); tests/test_tool_registry.py (RegistryPersistenceTests); D-0014"
-    },
-    {
-      "id": "cap.tools.mcp_adapter",
-      "status": "integrated",
-      "evidence": "src/tools/mcp_adapter.py (descriptor mapping only). MCP transport/client: not implemented (UNKNOWN fit with live servers)"
-    },
-    {
-      "id": "cap.tools.mcp_transport",
-      "status": "deferred",
-      "evidence": "R-0006: no MCP client/transport; no network in Cycle 3"
-    },
-    {
-      "id": "cap.tools.os_sandbox",
-      "status": "integrated",
-      "evidence": "src/tools/sandbox.py (bwrap: user/pid/net/ipc/uts ns, ro fs, tmpfs /tmp, cap-drop ALL, fail closed); tests/test_sandbox.py, tests/test_sandbox_adversarial.py (SANDBOX_ADVERSARIAL cases=21 escapes=0); D-0013, S-0006. No seccomp (gap). cycle-005: RLIMIT_NPROC inside the userns (WorkerSpec.max_procs), fork-bomb test."
-    },
-    {
-      "id": "cap.control.host_hardening",
-      "status": "integrated",
-      "evidence": "src/control_plane/hardening.py; ControlPlane.__init__ enforces PR_SET_DUMPABLE=0 or raises HostHardeningError; HostHardeningTests; mutants host_hardening_optional/not_applied killed (D-0014)"
-    },
-    {
-      "id": "cap.tools.egress",
-      "status": "integrated",
-      "evidence": "src/tools/egress.py (host-side Unix-socket CONNECT proxy: grammar, allowlist before DNS, rebinding guard, conn/byte budgets, every attempt audited); src/tools/subprocess_handler.py (WorkerSpec.egress, requires audit); src/tools/registry.py (egress requires risk>=EXTERNAL); tests/test_egress_adversarial.py; D-0015, R-0011"
-    },
-    {
-      "id": "cap.computer.browser",
-      "status": "integrated (fetch tier only; no JS)",
-      "evidence": "src/builtin_tools/browser.py, src/builtin_tools/egress_client.py, src/tools/builtins.py; tests/test_browser.py; Playwright/CDP deferred (R-0012)"
-    },
-    {
-      "id": "cap.security.credential_broker",
-      "status": "designed (not implemented)",
-      "evidence": "RM-0006, D-0016"
-    },
-    {
-      "id": "cap.memory.knowledge",
-      "status": "integrated",
-      "evidence": "src/memory/{store,handlers,ingest}.py; control_plane.handlers.TrustedHostHandler; tests/test_memory.py, tests/test_memory_adversarial.py (MEMORY_ADVERSARIAL cases=15 violations=0; POISONED_MEMORY dangerous_executions=0); D-0018, D-0019, S-0008"
-    },
-    {
-      "id": "cap.research.evidence",
-      "status": "integrated",
-      "evidence": "src/research/*; tests/test_research.py, tests/test_research_adversarial.py (RESEARCH_ADVERSARIAL cases=16 violations=0; BRANCH_CLOSED after 3 non-superior passes, refused_pass_fetches=0; RESEARCH_REPORT identical_runs=2); D-0020, D-0021, S-0009; cycle-008: HMAC-chained claim ledger + src/integrity/crosscheck.py (LEDGER_TAMPER detected=6/6; CROSSCHECK in CI)"
-    },
-    {
-      "id": "cap.workflow.scheduler",
-      "status": "integrated",
-      "evidence": "src/scheduler/*; tests/test_scheduler.py, tests/test_scheduler_adversarial.py (SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1); D-0022, D-0023, S-0010"
-    }
-  ],
-  "verification": {
-    "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 191 tests, OK (Python 3.13.5; 3.11 and 3.12 via uv)",
-    "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
-    "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
-    "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
-    "adversarial_sandbox": "SANDBOX_ADVERSARIAL cases=21 escapes=0",
-    "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
-    "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
-    "mutation": "MUTANT_SHARD=0/3,1/3,2/3 bash scripts/mutation_check.sh -> 40/40, 39/39, 39/39 = 118/118 locally (619/618/604 s)",
-    "ci": "run 39358456324 on 4f57370: success; test (3.11, 0/3) 18m21s, (3.12, 1/3) 13m37s, (3.13, 2/3) 12m15s; 191 tests OK x3; SCHEDULER_ADVERSARIAL 13/0 x3; CROSSCHECK detected=6/6 x3; MUTATION 40+39+39=118/118 (I-0024)",
-    "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
-    "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
-    "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)",
-    "adversarial_research": "RESEARCH_ADVERSARIAL cases=16 violations=0",
-    "branch_closed": "BRANCH_CLOSED passes=5 stale=3 metric=p50_ms best=30.0 refused_pass_fetches=0",
-    "research_report": "RESEARCH_REPORT claims=15 unknown=4 citations=15 identical_runs=2 (sha differs across processes: fixture port is part of the URL input)",
-    "adversarial_scheduler": "SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1",
-    "ledger_tamper": "LEDGER_TAMPER detected=6/6",
-    "crosscheck": "CROSSCHECK clean ok=True; tampers=6 detected=6 failures=[]"
+ "cycle_id": "cycle-009-economics",
+ "head_sha": "UNKNOWN until pushed; recorded in I-0025 after the PR run",
+ "head_sha_note": "Updated after the PR run.",
+ "baseline_sha": "521f8945dea9c2df1e0c2eaa0bfd34428ed16e18",
+ "branch": "cycle-9/economics",
+ "capabilities": [
+  {
+   "id": "cap.control.policy",
+   "status": "integrated",
+   "evidence": "src/control_plane/policy.py; tests/test_policy.py; python3 -m unittest discover -s tests -t . -> 'Ran 52 tests ... OK'; Cycle 2: backed by persistent GrantStore, decisions carry policy_version"
   },
-  "economics": {
-    "expected_revenue_usd": 0,
-    "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (no metering until cycle-009)",
-    "measured_cost_usd": "UNKNOWN",
-    "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
-    "latency_cost": "scheduler tick (1-step job) p50 ~2.9 ms, idle ~0.3 ms locally (B-0015)"
+  {
+   "id": "cap.control.approvals",
+   "status": "integrated",
+   "evidence": "src/control_plane/approvals.py; tests/test_approvals.py + tests/test_adversarial.py (10 token-attack cases blocked)"
   },
-  "last_updated": "2026-10-20T02:45:00Z",
-  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/8 (open, not merged)",
-  "cycle_history": [
-    {
-      "cycle_id": "cycle-001-control-plane",
-      "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1",
-      "merged_to_main": "7edabd1e8efe6794446c9a9a41256c8088f0decc",
-      "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
-    },
-    {
-      "cycle_id": "cycle-002-orchestration",
-      "head_sha": "7a1cdace4c2218f75a3f905723c3a9356d3c88db",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/2",
-      "merged_to_main": "27ac19430bbe25651cac2383d3063d8dbf0a297b",
-      "ci": "success: GitHub Actions run 39321439337 on 7a1cdace (test 3.11/3.12/3.13 pass; 'Ran 93 tests'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'ORCH_ADVERSARIAL cases=18 unauthorized_executions=0'; 'MUTATION mutants=20 killed=20')"
-    },
-    {
-      "cycle_id": "cycle-003-tool-substrate",
-      "head_sha": "a4554490f7cd61d7580715bdf7a68b4847cb2e1b",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/3",
-      "merged_to_main": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e",
-      "ci": "success: run 39325010443 on 12cefdd (3.11/3.12/3.13 pass; 'Ran 135 tests'; 'TOOL_ADVERSARIAL cases=20 unauthorized_executions=0'; 'no leaked worker processes'; 'MUTATION mutants=32 killed=32'). Earlier run 39323831631 on 42b7f9a failed the leak-check step only (I-0008). Final head a4554490 run 39325609307 success."
-    },
-    {
-      "cycle_id": "cycle-004-isolation",
-      "head_sha": "60b0a11bbaee185a75296555173c7c533f2d754a",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/4",
-      "merged_to_main": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7",
-      "ci": "success: run 39329642600 on f0749ca (3.11/3.12/3.13 pass; 'Ran 146 tests'; 'SANDBOX_ADVERSARIAL cases=21 escapes=0'; 'MUTATION mutants=42 killed=42'; runner: bubblewrap 0.9.0 apt-installed, AppArmor userns restriction=1 relaxed CI-only (I-0012)) Final head 60b0a11 run 39330724213 success."
-    },
-    {
-      "cycle_id": "cycle-005-browser-egress",
-      "head_sha": "8ca78c21420b55258cfdf81b8644f3d2a0d126f1",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/5",
-      "merged_to_main": "8e30c65c430d36281a5b8ba8e4cf4cedee1ddfb9",
-      "ci": "success: run 39338745621 on b8c7a4b (3.11/3.12/3.13 pass; 'Ran 153 tests'; 'EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 ... audited_attempts=22'; FORK_BOMB contained; 'MUTATION mutants=54 killed=54') (I-0015) Final head 8ca78c2 run 39339865437 success."
-    },
-    {
-      "cycle_id": "cycle-006-memory",
-      "head_sha": "a0c6277d1ffcd8f7af4e79c2718e14cfe93b9cbb",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/6",
-      "merged_to_main": "d7b405b506588fc95c641b364c41a338cf25304b",
-      "ci": "success: run 39342990292 on 9dd159a and run 39344323494 on a0c6277 (3.11/3.12/3.13 pass; 'Ran 161 tests'; MEMORY_SEARCH_MODE=fts5; 'MUTATION mutants=68 killed=68') (I-0018, I-0019)"
-    },
-    {
-      "cycle_id": "cycle-007-research",
-      "head_sha": "b66ca8beca6b9f3daf7905c570e1e135ef39967e",
-      "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/7",
-      "merged_to_main": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8",
-      "ci": "success: run 39349488423 on dd2b259 and run 39351689327 on b66ca8b (3.11/3.12/3.13 pass; 'Ran 174 tests'; RESEARCH_ADVERSARIAL 16/0; 'MUTATION mutants=94 killed=94'; 3.13 job 21m37s) (I-0021, I-0022)"
-    }
-  ],
-  "baseline_inspection_cycle_8": {
-    "branch": "main",
-    "head": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8 (merge of PR #7)",
-    "ci": "success on PR #7 head b66ca8b (run 39351689327)",
-    "open_prs": "none after merge of #7",
-    "dependencies": "stdlib (sqlite3 with FTS5) + system bubblewrap"
+  {
+   "id": "cap.control.idempotency",
+   "status": "integrated",
+   "evidence": "src/control_plane/ledger.py; tests/test_idempotency.py (replay, restart, conflict, in_doubt, 8-thread duplicate -> 1 execution)"
+  },
+  {
+   "id": "cap.control.loop_governor",
+   "status": "integrated",
+   "evidence": "src/control_plane/governor.py; tests/test_governor.py (iteration/wall/cost -> cycle_aborted, sticky)"
+  },
+  {
+   "id": "cap.control.kill_switch",
+   "status": "integrated",
+   "evidence": "src/control_plane/killswitch.py; tests/test_killswitch.py (all risk levels blocked, cross-process file switch, fail-closed)"
+  },
+  {
+   "id": "cap.control.audit_log",
+   "status": "integrated",
+   "evidence": "src/control_plane/audit.py; tests/test_audit.py (redaction, hash-chain tamper/deletion detection)"
+  },
+  {
+   "id": "cap.control.rate_limit",
+   "status": "integrated",
+   "evidence": "src/control_plane/ratelimit.py; tests/test_failures.py::test_rate_limit"
+  },
+  {
+   "id": "cap.control.persistent_policy_store",
+   "status": "integrated",
+   "evidence": "src/control_plane/grant_store.py; tests/test_grant_store.py (restart persistence, monotonic versions, grant/revoke audit, risk-escalation invalidation)"
+  },
+  {
+   "id": "cap.orchestration.agent_runtime",
+   "status": "integrated",
+   "evidence": "src/orchestrator/runner.py; tests/test_runner.py (19 tests: duplicates, timeout fallback, outage, malformed, budgets, kill, approval pause/resume, in_doubt)"
+  },
+  {
+   "id": "cap.control.gateway",
+   "status": "integrated",
+   "evidence": "src/control_plane/gateway.py; tests/test_orchestrator_adversarial.py::HandlerIsolationTests. Cycle 3: test_known_gap_in_process_introspection flipped to test_gap_closed_tool_code_cannot_reach_handlers; residual pinned by test_residual_trusted_inprocess_code_can_invoke_launchers"
+  },
+  {
+   "id": "cap.orchestration.provider_interface",
+   "status": "integrated",
+   "evidence": "src/orchestrator/provider.py (str->str Protocol + deterministic MockProvider); no real provider adapter exists (UNKNOWN fit for any vendor API)"
+  },
+  {
+   "id": "cap.orchestration.proposal_parser",
+   "status": "integrated",
+   "evidence": "src/orchestrator/proposal.py; tests/test_proposal.py (13 stable malformed codes)"
+  },
+  {
+   "id": "cap.tools.typed_mcp",
+   "status": "integrated",
+   "evidence": "Composite of cap.tools.registry + cap.tools.mcp_adapter + cap.tools.handler_isolation + cap.tools.args_schema; live MCP execution NOT implemented"
+  },
+  {
+   "id": "cap.tools.handler_isolation",
+   "status": "integrated",
+   "evidence": "src/tools/subprocess_handler.py, src/tools/worker.py, src/control_plane/handlers.py, src/control_plane/hardening.py; tests/test_subprocess_handler.py (env allowlist + canary, no inherited fds, no control_plane import/gc objects, worker+child dead after timeout, rlimits, protocol forgery, host non-dumpable); since cycle-004 every worker runs in the bwrap sandbox"
+  },
+  {
+   "id": "cap.tools.args_schema",
+   "status": "integrated",
+   "evidence": "src/control_plane/schema.py; enforced in src/control_plane/executor.py before replay/approval/execution; tests/test_schema.py"
+  },
+  {
+   "id": "cap.tools.registry",
+   "status": "integrated",
+   "evidence": "src/tools/registry.py, src/tools/registry_store.py (SQLite, versioned tool_events, reload re-validates WorkerSpec); tests/test_tool_registry.py (RegistryPersistenceTests); D-0014"
+  },
+  {
+   "id": "cap.tools.mcp_adapter",
+   "status": "integrated",
+   "evidence": "src/tools/mcp_adapter.py (descriptor mapping only). MCP transport/client: not implemented (UNKNOWN fit with live servers)"
+  },
+  {
+   "id": "cap.tools.mcp_transport",
+   "status": "deferred",
+   "evidence": "R-0006: no MCP client/transport; no network in Cycle 3"
+  },
+  {
+   "id": "cap.tools.os_sandbox",
+   "status": "integrated",
+   "evidence": "src/tools/sandbox.py (bwrap: user/pid/net/ipc/uts ns, ro fs, tmpfs /tmp, cap-drop ALL, fail closed); tests/test_sandbox.py, tests/test_sandbox_adversarial.py (SANDBOX_ADVERSARIAL cases=21 escapes=0); D-0013, S-0006. No seccomp (gap). cycle-005: RLIMIT_NPROC inside the userns (WorkerSpec.max_procs), fork-bomb test."
+  },
+  {
+   "id": "cap.control.host_hardening",
+   "status": "integrated",
+   "evidence": "src/control_plane/hardening.py; ControlPlane.__init__ enforces PR_SET_DUMPABLE=0 or raises HostHardeningError; HostHardeningTests; mutants host_hardening_optional/not_applied killed (D-0014)"
+  },
+  {
+   "id": "cap.tools.egress",
+   "status": "integrated",
+   "evidence": "src/tools/egress.py (host-side Unix-socket CONNECT proxy: grammar, allowlist before DNS, rebinding guard, conn/byte budgets, every attempt audited); src/tools/subprocess_handler.py (WorkerSpec.egress, requires audit); src/tools/registry.py (egress requires risk>=EXTERNAL); tests/test_egress_adversarial.py; D-0015, R-0011"
+  },
+  {
+   "id": "cap.computer.browser",
+   "status": "integrated (fetch tier only; no JS)",
+   "evidence": "src/builtin_tools/browser.py, src/builtin_tools/egress_client.py, src/tools/builtins.py; tests/test_browser.py; Playwright/CDP deferred (R-0012)"
+  },
+  {
+   "id": "cap.security.credential_broker",
+   "status": "designed (not implemented)",
+   "evidence": "RM-0006, D-0016"
+  },
+  {
+   "id": "cap.memory.knowledge",
+   "status": "integrated",
+   "evidence": "src/memory/{store,handlers,ingest}.py; control_plane.handlers.TrustedHostHandler; tests/test_memory.py, tests/test_memory_adversarial.py (MEMORY_ADVERSARIAL cases=15 violations=0; POISONED_MEMORY dangerous_executions=0); D-0018, D-0019, S-0008"
+  },
+  {
+   "id": "cap.research.evidence",
+   "status": "integrated",
+   "evidence": "src/research/*; tests/test_research.py, tests/test_research_adversarial.py (RESEARCH_ADVERSARIAL cases=16 violations=0; BRANCH_CLOSED after 3 non-superior passes, refused_pass_fetches=0; RESEARCH_REPORT identical_runs=2); D-0020, D-0021, S-0009; cycle-008: HMAC-chained claim ledger + src/integrity/crosscheck.py (LEDGER_TAMPER detected=6/6; CROSSCHECK in CI)"
+  },
+  {
+   "id": "cap.workflow.scheduler",
+   "status": "integrated",
+   "evidence": "src/scheduler/*; tests/test_scheduler.py, tests/test_scheduler_adversarial.py (SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1); D-0022, D-0023, S-0010"
+  },
+  {
+   "id": "cap.economics.ledger",
+   "status": "integrated",
+   "evidence": "src/economics/ledger.py, quantity.py; tests/test_economics.py; ECON_ADVERSARIAL cases=16 violations=0; D-0024, D-0025, S-0011"
+  },
+  {
+   "id": "cap.economics.budget_guard",
+   "status": "integrated",
+   "evidence": "Caps + ControlPlane guard before ledger.begin; dry_run; tests/test_economics*.py; S-0011"
+  },
+  {
+   "id": "cap.observability.status",
+   "status": "integrated",
+   "evidence": "src/economics/status.py; python -m economics status; scripts/status_ci.py (STATUS_CI ok=True); STATUS_REPORT attention=8"
   }
+ ],
+ "verification": {
+  "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 207 tests, OK (Python 3.13.5; 3.11 and 3.12 via uv)",
+  "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
+  "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
+  "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
+  "adversarial_sandbox": "SANDBOX_ADVERSARIAL cases=21 escapes=0",
+  "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
+  "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
+  "mutation": "146 defined; MUTANT_ONLY='^econ_' -> 28/28 killed locally; full union runs sharded in CI (I-0025)",
+  "ci": "UNKNOWN until the PR run (I-0025)",
+  "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
+  "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
+  "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)",
+  "adversarial_research": "RESEARCH_ADVERSARIAL cases=16 violations=0",
+  "branch_closed": "BRANCH_CLOSED passes=5 stale=3 metric=p50_ms best=30.0 refused_pass_fetches=0",
+  "research_report": "RESEARCH_REPORT claims=15 unknown=4 citations=15 identical_runs=2 (sha differs across processes: fixture port is part of the URL input)",
+  "adversarial_scheduler": "SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1",
+  "ledger_tamper": "LEDGER_TAMPER detected=6/6",
+  "crosscheck": "CROSSCHECK clean ok=True; tampers=6 detected=6 failures=[]",
+  "adversarial_economics": "ECON_ADVERSARIAL cases=16 violations=0",
+  "status_report": "STATUS_REPORT attention=8 classes=[actual_usd_unknown, crosscheck_failed, day_usd_global_burn>=80%, in_doubt, kill_switch_engaged, quarantined, reservation_without_outcome, skipped_gaps]"
+ },
+ "economics": {
+  "expected_revenue_usd": 0,
+  "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (the agent session itself is not metered by the repo)",
+  "measured_cost_usd": "UNKNOWN (no billing source; repo now meters per-op wall time, tool calls, proxy egress bytes, provider usage when reported)",
+  "telemetry": "cycle-009 EconomicsLedger: every governed op that executes has one MAC'd, anchored row with expected_value, estimated_cost, actual_cost, expected_revenue, actual_revenue, risk, confidence, each with provenance measured|configured_estimate|unknown",
+  "live_money_prerequisites": "see RM-0011: telemetry MET; spend caps MET for estimates; billed cost, balance guards, exposure/drawdown, venue allowlist, reconciliation, external witness NOT MET; emergency stop PARTIAL",
+  "latency_cost": "economics ledger overhead p50 ~1.3 ms per governed op locally (B-0017)"
+ },
+ "last_updated": "2026-10-20T03:30:00Z",
+ "pull_request": "UNKNOWN (opened after push)",
+ "cycle_history": [
+  {
+   "cycle_id": "cycle-001-control-plane",
+   "head_sha": "560de621c8ddb0a3817dac10630eb243e57f3ed3",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/1",
+   "merged_to_main": "7edabd1e8efe6794446c9a9a41256c8088f0decc",
+   "ci": "success: GitHub Actions run 39319720689 on 560de621 (test 3.11/3.12/3.13 pass; 'Ran 52 tests ... OK'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'MUTATION mutants=10 killed=10')"
+  },
+  {
+   "cycle_id": "cycle-002-orchestration",
+   "head_sha": "7a1cdace4c2218f75a3f905723c3a9356d3c88db",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/2",
+   "merged_to_main": "27ac19430bbe25651cac2383d3063d8dbf0a297b",
+   "ci": "success: GitHub Actions run 39321439337 on 7a1cdace (test 3.11/3.12/3.13 pass; 'Ran 93 tests'; 'ADVERSARIAL cases=20 unauthorized_executions=0'; 'ORCH_ADVERSARIAL cases=18 unauthorized_executions=0'; 'MUTATION mutants=20 killed=20')"
+  },
+  {
+   "cycle_id": "cycle-003-tool-substrate",
+   "head_sha": "a4554490f7cd61d7580715bdf7a68b4847cb2e1b",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/3",
+   "merged_to_main": "12f0b7fae2664eb2cefec2c5a159e13d7b75fa4e",
+   "ci": "success: run 39325010443 on 12cefdd (3.11/3.12/3.13 pass; 'Ran 135 tests'; 'TOOL_ADVERSARIAL cases=20 unauthorized_executions=0'; 'no leaked worker processes'; 'MUTATION mutants=32 killed=32'). Earlier run 39323831631 on 42b7f9a failed the leak-check step only (I-0008). Final head a4554490 run 39325609307 success."
+  },
+  {
+   "cycle_id": "cycle-004-isolation",
+   "head_sha": "60b0a11bbaee185a75296555173c7c533f2d754a",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/4",
+   "merged_to_main": "58fc1ca7f1408e2d92972374a143b7b21d38b3f7",
+   "ci": "success: run 39329642600 on f0749ca (3.11/3.12/3.13 pass; 'Ran 146 tests'; 'SANDBOX_ADVERSARIAL cases=21 escapes=0'; 'MUTATION mutants=42 killed=42'; runner: bubblewrap 0.9.0 apt-installed, AppArmor userns restriction=1 relaxed CI-only (I-0012)) Final head 60b0a11 run 39330724213 success."
+  },
+  {
+   "cycle_id": "cycle-005-browser-egress",
+   "head_sha": "8ca78c21420b55258cfdf81b8644f3d2a0d126f1",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/5",
+   "merged_to_main": "8e30c65c430d36281a5b8ba8e4cf4cedee1ddfb9",
+   "ci": "success: run 39338745621 on b8c7a4b (3.11/3.12/3.13 pass; 'Ran 153 tests'; 'EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 ... audited_attempts=22'; FORK_BOMB contained; 'MUTATION mutants=54 killed=54') (I-0015) Final head 8ca78c2 run 39339865437 success."
+  },
+  {
+   "cycle_id": "cycle-006-memory",
+   "head_sha": "a0c6277d1ffcd8f7af4e79c2718e14cfe93b9cbb",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/6",
+   "merged_to_main": "d7b405b506588fc95c641b364c41a338cf25304b",
+   "ci": "success: run 39342990292 on 9dd159a and run 39344323494 on a0c6277 (3.11/3.12/3.13 pass; 'Ran 161 tests'; MEMORY_SEARCH_MODE=fts5; 'MUTATION mutants=68 killed=68') (I-0018, I-0019)"
+  },
+  {
+   "cycle_id": "cycle-007-research",
+   "head_sha": "b66ca8beca6b9f3daf7905c570e1e135ef39967e",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/7",
+   "merged_to_main": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8",
+   "ci": "success: run 39349488423 on dd2b259 and run 39351689327 on b66ca8b (3.11/3.12/3.13 pass; 'Ran 174 tests'; RESEARCH_ADVERSARIAL 16/0; 'MUTATION mutants=94 killed=94'; 3.13 job 21m37s) (I-0021, I-0022)"
+  },
+  {
+   "cycle_id": "cycle-008-scheduler",
+   "head_sha": "7e87b906e8c1bae9bcc9d77d685dd10b161cf590",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/8",
+   "merged_to_main": "521f8945dea9c2df1e0c2eaa0bfd34428ed16e18",
+   "ci": "success: run 39358456324 on 4f57370 and run 39360311698 on 7e87b90 (191 tests OK x3; SCHEDULER_ADVERSARIAL 13/0; CROSSCHECK 6/6; MUTATION 118/118 sharded; slowest job 18m21s) (I-0024)"
+  }
+ ],
+ "baseline_inspection_cycle_8": {
+  "branch": "main",
+  "head": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8 (merge of PR #7)",
+  "ci": "success on PR #7 head b66ca8b (run 39351689327)",
+  "open_prs": "none after merge of #7",
+  "dependencies": "stdlib (sqlite3 with FTS5) + system bubblewrap"
+ }
 }

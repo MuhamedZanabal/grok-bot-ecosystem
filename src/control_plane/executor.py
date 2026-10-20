@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 import json
 import re
+import time
 from typing import Any, Callable, Mapping
 
 from .approvals import ApprovalAuthority, ApprovalError
@@ -28,7 +29,8 @@ from .schema import ArgsInvalid, validate as validate_args
 OPERATION_ID = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 MAX_ARGS_BYTES = 64 * 1024
 _REQUIRED = {"operation_id", "actor", "capability", "args"}
-_ALLOWED = _REQUIRED | {"approval_token"}
+_ALLOWED = _REQUIRED | {"approval_token", "dry_run", "budget_scope"}
+SCOPE_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 class Status(str, Enum):
@@ -45,6 +47,7 @@ class Status(str, Enum):
     IN_DOUBT = "in_doubt"                  # prior attempt crashed mid-operation
     FAILED = "failed"
     TIMED_OUT = "timed_out"
+    DRY_RUN = "dry_run"                    # every non-consuming check passed; nothing executed
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,7 @@ class ControlPlane:
                  ledger: IdempotencyLedger, audit: AuditLog, kill_switch: KillSwitch,
                  governor: LoopGovernor, rate_limiter: RateLimiter | None = None,
                  handler_timeout_s: float = 30.0, allow_inprocess_handlers: bool = False,
-                 require_host_hardening: bool = True) -> None:
+                 require_host_hardening: bool = True, economics=None) -> None:
         hardened = set_non_dumpable()
         if require_host_hardening and not hardened:
             raise HostHardeningError("prctl(PR_SET_DUMPABLE, 0) failed; refusing to start")
@@ -78,6 +81,7 @@ class ControlPlane:
         self.handler_timeout_s = handler_timeout_s
         self._allow_inprocess = allow_inprocess_handlers
         self._handlers: dict[str, Handler] = {}
+        self.economics = economics      # EconomicsLedger: spend guard + meter (cycle-009, D-0024)
 
     def bind(self, capability_id: str, handler: Handler) -> None:
         cap = self.policy.capability(capability_id)
@@ -130,6 +134,12 @@ class ControlPlane:
         tok = request.get("approval_token")
         if tok is not None and not isinstance(tok, str):
             return "bad_approval_token_type"
+        if not isinstance(request.get("dry_run", False), bool):
+            return "bad_dry_run"
+        scope = request.get("budget_scope", {})
+        if not isinstance(scope, dict) or not set(scope) <= {"run", "job"} or not all(
+                isinstance(v, str) and SCOPE_ID.fullmatch(v) for v in scope.values()):
+            return "bad_budget_scope"
         return None
 
     # ------------------------------------------------------------------ execute
@@ -175,6 +185,15 @@ class ControlPlane:
             ctx["approval_id"] = claims["token_id"]
             ctx["approver"] = claims["approver"]
 
+        scope, econ = dict(request.get("budget_scope", {})), self.economics
+        if request.get("dry_run", False):   # rate limiter and governor consume budget: not evaluated
+            est = None
+            if econ is not None:
+                ok, why, est = econ.admit(actor, cap, op, scope, reserve=False)
+                if not ok:
+                    return self._out(Status.DENIED, op, f"budget:{why}", **ctx)
+            return self._out(Status.DRY_RUN, op, "would_execute", {"estimated_cost": est}, **ctx)
+
         if self.rate_limiter is not None and not self.rate_limiter.allow(cap):
             return self._out(Status.RATE_LIMITED, op, "rate_limited", **ctx)
 
@@ -187,10 +206,20 @@ class ControlPlane:
         if state is not LoopState.RUNNING:
             return self._out(Status.CYCLE_ABORTED, op, self.governor.reason, **ctx)
 
+        if econ is not None:  # cumulative caps deny BEFORE execution; reservation is persisted
+            ok, why, _ = econ.admit(actor, cap, op, scope)
+            if not ok:
+                return self._out(Status.DENIED, op, f"budget:{why}", **ctx)
         if not self.ledger.begin(op, cap, actor, digest):  # lost a race with a duplicate
             return self._from_prior(self.ledger.get(op), op, cap, actor, digest, ctx)
         self.audit.append("execute_begin", operation_id=op, args_sha256=digest, cost=cost, **ctx)
-        return self._run(handler, op, args, ctx)
+        if econ is None:
+            return self._run(handler, op, args, ctx)
+        mark, t0 = econ.mark(cap), time.perf_counter()
+        out = self._run(handler, op, args, ctx)
+        econ.record_operation(op, actor, cap, scope, out.status.value, out.reason, time.perf_counter() - t0,
+                              mark, int(decision.risk))
+        return out
 
     def _from_prior(self, prior, op, cap, actor, digest, ctx) -> Outcome:
         if (prior.capability, prior.actor, prior.args_sha256) != (cap, actor, digest):
