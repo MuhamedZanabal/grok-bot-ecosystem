@@ -426,3 +426,28 @@
 - **rejected:** merging in-cycle.
 - **tradeoffs:** S-0010 gaps stand. Shard 0/3 is the long pole; balancing it is UNKNOWN beyond index-mod.
 - **reversal criteria:** any later red run on this branch.
+
+## I-0025: cycle-009 CI result on PR #9
+- **decision_id:** I-0025
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-009 (D-0024 required this).
+- **options:** n/a.
+- **evidence:** run 39363591310 on headSha `a14b97ad99e5c662e30848c504947ee382cd8845`, conclusion `success`, from 2026-10-20 06:18 to 06:32 UTC+3. Jobs, all `success`: `test (3.11, 0/3)` 13m36s, `test (3.12, 1/3)` 14m13s, `test (3.13, 2/3)` 13m08s. `gh run view --job <id> --log` gave the following.
+  - **All three jobs:**
+    - `Ran 207 tests ... OK`
+    - `ECON_ADVERSARIAL cases=16 violations=0`
+    - `STATUS_REPORT attention=8 classes=['actual_usd_unknown', 'crosscheck_failed', 'day_usd_global_burn>=80%', 'in_doubt', 'kill_switch_engaged', 'quarantined', 'reservation_without_outcome', 'skipped_gaps']`
+    - `STATUS_CI ok=True` (new CI step)
+    - `CROSSCHECK clean ok=True audit_records=142 memory_rows=5 claim_rows=10` and `CROSSCHECK tampers=6 detected=6 failures=[]`
+    - Prior sets unchanged: SCHEDULER 13/0 `max_begins_per_op=1`, RESEARCH 16/0, MEMORY 15/0, `POISONED_MEMORY ... dangerous_executions=0`, ADVERSARIAL 20/0, ORCH 18/0, TOOL 20/0, SANDBOX 21/0, EGRESS 26/0, `FORK_BOMB ... left=0`
+    - `no leaked worker processes`
+  - **Mutation shards:** `MUTATION mutants=49 killed=49 shard=0/3`, `49/49 shard=1/3`, `48/48 shard=2/3`, each `total_defined=146`, i.e. 146/146.
+  - **Wall time:** the slowest job took 14m13s, within the D-0024 metric 6 bound of 21m21s (18m21s + 3 min). This run was faster than cycle-008's on the same shard count; runner variance is UNKNOWN.
+  - **3.13 bench:**
+    - `BENCH econ_execute n=300 p50_ms_no_ledger=1.274 p50_ms_ledger=3.519 overhead_p50_ms=2.245`
+    - `BENCH econ_guard_growth first50_p50_ms=3.522 last50_p50_ms=3.524 rows_at_end=600` (flat)
+    - `scheduler_tick_run p50_ms=5.518`
+- **selected:** cycle-009 metric met in CI. PR #9 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0011 gaps stand. The CI overhead of about 2.2 ms per governed op is under the B-0017 5 ms reversal bound.
+- **reversal criteria:** any later red run on this branch.

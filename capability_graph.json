@@ -1,413 +1,474 @@
 {
-  "nodes": [
-    {
-      "id": "cap.control.policy",
-      "description": "Default-deny capability policy with explicit per-actor grants and risk levels 0-3",
-      "implementations": [
-        "src/control_plane/policy.py"
-      ],
-      "expected_value": 0.9
-    },
-    {
-      "id": "cap.control.approvals",
-      "description": "HMAC approval tokens bound to actor, capability, operation_id, SHA-256(canonical args), expiry (max 1h)",
-      "implementations": [
-        "src/control_plane/approvals.py"
-      ],
-      "expected_value": 0.9
-    },
-    {
-      "id": "cap.control.idempotency",
-      "description": "SQLite ledger: at-most-once execution per operation_id; replay, conflict and in_doubt states",
-      "implementations": [
-        "src/control_plane/ledger.py"
-      ],
-      "expected_value": 0.85
-    },
-    {
-      "id": "cap.control.loop_governor",
-      "description": "Iteration, wall-clock and cost budgets with sticky cycle_aborted/killed states",
-      "implementations": [
-        "src/control_plane/governor.py"
-      ],
-      "expected_value": 0.8
-    },
-    {
-      "id": "cap.control.kill_switch",
-      "description": "Global in-memory + file kill switch, fail-closed, operator CLI",
-      "implementations": [
-        "src/control_plane/killswitch.py",
-        "src/control_plane/__main__.py"
-      ],
-      "expected_value": 0.85
-    },
-    {
-      "id": "cap.control.audit_log",
-      "description": "Append-only hash-chained JSONL audit with secret redaction",
-      "implementations": [
-        "src/control_plane/audit.py"
-      ],
-      "expected_value": 0.8
-    },
-    {
-      "id": "cap.control.rate_limit",
-      "description": "Per-capability token bucket",
-      "implementations": [
-        "src/control_plane/ratelimit.py"
-      ],
-      "expected_value": 0.5
-    },
-    {
-      "id": "cap.control.persistent_policy_store",
-      "description": "Durable, versioned grants with audited grant/revoke events and risk-at-grant binding",
-      "implementations": [
-        "src/control_plane/grant_store.py"
-      ],
-      "expected_value": 0.6
-    },
-    {
-      "id": "cap.orchestration.agent_runtime",
-      "description": "Bounded, model-neutral agent loop; typed proposals only, via ActorGateway; deterministic terminal states",
-      "implementations": [
-        "src/orchestrator/runner.py"
-      ],
-      "expected_value": 0.8
-    },
-    {
-      "id": "cap.tools.typed_mcp",
-      "description": "Typed tool registry + MCP tools/list descriptor adapter (candidates untrusted until accepted); no transport",
-      "implementations": [
-        "src/tools/registry.py",
-        "src/tools/mcp_adapter.py"
-      ],
-      "expected_value": 0.75
-    },
-    {
-      "id": "cap.computer.browser",
-      "description": "Browser substrate: cap.browser.fetch (stdlib GET + HTML extraction, no JS) in the sandbox via the egress proxy; JS engines deferred (R-0012)",
-      "implementations": [
-        "src/builtin_tools/browser.py",
-        "src/builtin_tools/egress_client.py",
-        "src/tools/builtins.py"
-      ],
-      "expected_value": 0.5
-    },
-    {
-      "id": "cap.memory.knowledge",
-      "description": "Provenance-tagged, HMAC-chained, budgeted, redacting memory behind the control plane; contents are untrusted data (cycle-006); cap.memory.get by id (cycle-007)",
-      "implementations": [
-        "src/memory/store.py",
-        "src/memory/handlers.py",
-        "src/memory/ingest.py"
-      ],
-      "expected_value": 0.5
-    },
-    {
-      "id": "cap.research.evidence",
-      "description": "Source registry (exact URL, stable id, candidate/untrusted/non-executable, evidence-gated lifecycle), claim ledger + verifier (fabricated/mutated citations refused; stale/contradicted -> UNKNOWN), deterministic cited research run with branch_closed (cycle-007); HMAC-chained claim ledger + audit-anchor cross-check (cycle-008)",
-      "implementations": [
-        "src/research/sources.py",
-        "src/research/ledger.py",
-        "src/research/verifier.py",
-        "src/research/extract.py",
-        "src/research/handlers.py",
-        "src/research/run.py",
-        "src/integrity/crosscheck.py"
-      ],
-      "expected_value": 0.45
-    },
-    {
-      "id": "cap.workflow.scheduler",
-      "description": "Persistent, MAC'd job definitions (interval/cron UTC); exactly-once-per-slot steps via ControlPlane idempotency; leases + crash recovery (in_doubt never retried); skip/catch-up cap; concurrency limit; kill switch; per-run governor budgets (cycle-008)",
-      "implementations": [
-        "src/scheduler/schedule.py",
-        "src/scheduler/store.py",
-        "src/scheduler/engine.py"
-      ],
-      "expected_value": 0.55
-    },
-    {
-      "id": "cap.observability.cost",
-      "description": "Telemetry + cost accounting; prerequisite for economic metrics (Cycle 8)",
-      "implementations": [],
-      "expected_value": 0.7
-    },
-    {
-      "id": "cap.security.hardening",
-      "description": "Key management, sandboxing, dependency/supply-chain controls (Cycle 9)",
-      "implementations": [],
-      "expected_value": 0.7
-    },
-    {
-      "id": "cap.revenue.workflows",
-      "description": "Autonomous revenue workflows; gated on cycles 1-9 controls (Cycle 10+)",
-      "implementations": [],
-      "expected_value": 0.4
-    },
-    {
-      "id": "cap.control.gateway",
-      "description": "Actor-bound, data-only gateway onto ControlPlane.execute; the only object an agent runtime holds",
-      "implementations": [
-        "src/control_plane/gateway.py"
-      ],
-      "expected_value": 0.8
-    },
-    {
-      "id": "cap.orchestration.provider_interface",
-      "description": "Provider-neutral str->str model interface + deterministic MockProvider",
-      "implementations": [
-        "src/orchestrator/provider.py"
-      ],
-      "expected_value": 0.7
-    },
-    {
-      "id": "cap.orchestration.proposal_parser",
-      "description": "Strict parser from untrusted model text to typed proposals",
-      "implementations": [
-        "src/orchestrator/proposal.py"
-      ],
-      "expected_value": 0.75
-    },
-    {
-      "id": "cap.tools.handler_isolation",
-      "description": "Per-call subprocess workers: env allowlist, no inherited fds, rlimits, process-group kill on timeout; host non-dumpable",
-      "implementations": [
-        "src/tools/subprocess_handler.py",
-        "src/tools/worker.py",
-        "src/control_plane/hardening.py",
-        "src/control_plane/handlers.py"
-      ],
-      "expected_value": 0.75
-    },
-    {
-      "id": "cap.tools.args_schema",
-      "description": "Strict JSON-Schema-subset argument validation enforced before execution",
-      "implementations": [
-        "src/control_plane/schema.py"
-      ],
-      "expected_value": 0.8
-    },
-    {
-      "id": "cap.tools.registry",
-      "description": "Typed tool registry with candidate/accepted/rejected trust states, audited",
-      "implementations": [
-        "src/tools/registry.py",
-        "src/tools/registry_store.py"
-      ],
-      "expected_value": 0.7
-    },
-    {
-      "id": "cap.tools.mcp_adapter",
-      "description": "MCP tools/list -> candidate capability descriptors; hints never lower risk",
-      "implementations": [
-        "src/tools/mcp_adapter.py"
-      ],
-      "expected_value": 0.6
-    },
-    {
-      "id": "cap.tools.mcp_transport",
-      "description": "MCP client transport (stdio/HTTP) behind SubprocessHandler (deferred)",
-      "implementations": [],
-      "expected_value": 0.5
-    },
-    {
-      "id": "cap.tools.os_sandbox",
-      "description": "OS sandbox for workers: bubblewrap user/pid/net/mount namespaces, ro fs, no network, fail closed (cycle-004); seccomp pending (cycle-010)",
-      "implementations": [
-        "src/tools/sandbox.py"
-      ],
-      "expected_value": 0.65
-    },
-    {
-      "id": "cap.control.host_hardening",
-      "description": "ControlPlane construction enforces a non-dumpable host process (PR_SET_DUMPABLE=0) or refuses to start",
-      "implementations": [
-        "src/control_plane/hardening.py",
-        "src/control_plane/executor.py"
-      ],
-      "expected_value": 0.6
-    },
-    {
-      "id": "cap.tools.egress",
-      "description": "Deny-by-default, audited, per-capability host:port egress for sandboxed workers via a host-side Unix-socket proxy",
-      "implementations": [
-        "src/tools/egress.py"
-      ],
-      "expected_value": 0.75
-    },
-    {
-      "id": "cap.security.credential_broker",
-      "description": "Designed only: host-side credential injection in the egress proxy; models/tools see handles, never secrets (RM-0006)",
-      "implementations": [],
-      "expected_value": 0.7
-    }
-  ],
-  "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
-  "edges": [
-    {
-      "from": "cap.orchestration.agent_runtime",
-      "to": "cap.control.policy",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.typed_mcp",
-      "to": "cap.orchestration.agent_runtime",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.revenue.workflows",
-      "to": "cap.observability.cost",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.revenue.workflows",
-      "to": "cap.security.hardening",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.orchestration.agent_runtime",
-      "to": "cap.control.gateway",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.orchestration.agent_runtime",
-      "to": "cap.orchestration.proposal_parser",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.orchestration.agent_runtime",
-      "to": "cap.orchestration.provider_interface",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.control.policy",
-      "to": "cap.control.persistent_policy_store",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.typed_mcp",
-      "to": "cap.tools.handler_isolation",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.typed_mcp",
-      "to": "cap.tools.args_schema",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.typed_mcp",
-      "to": "cap.tools.registry",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.registry",
-      "to": "cap.tools.mcp_adapter",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.mcp_transport",
-      "to": "cap.tools.handler_isolation",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.computer.browser",
-      "to": "cap.tools.handler_isolation",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.handler_isolation",
-      "to": "cap.tools.os_sandbox",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.computer.browser",
-      "to": "cap.tools.os_sandbox",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.control.policy",
-      "to": "cap.control.host_hardening",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.computer.browser",
-      "to": "cap.tools.egress",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.egress",
-      "to": "cap.tools.os_sandbox",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.tools.egress",
-      "to": "cap.control.audit_log",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.security.credential_broker",
-      "to": "cap.tools.egress",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.memory.knowledge",
-      "to": "cap.control.policy",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.memory.knowledge",
-      "to": "cap.control.audit_log",
-      "type": "depends_on"
-    },
-    {
-      "from": "cap.memory.knowledge",
-      "to": "cap.computer.browser",
-      "type": "ingests_from"
-    },
-    {
-      "from": "cap.research.evidence",
-      "to": "cap.memory.knowledge",
-      "type": "cites_and_verifies"
-    },
-    {
-      "from": "cap.research.evidence",
-      "to": "cap.computer.browser",
-      "type": "fetches_via"
-    },
-    {
-      "from": "cap.research.evidence",
-      "to": "cap.control.policy",
-      "type": "writes_through"
-    },
-    {
-      "from": "cap.research.evidence",
-      "to": "cap.orchestration.provider_interface",
-      "type": "tier1_mock_only"
-    },
-    {
-      "from": "cap.workflow.scheduler",
-      "to": "cap.control.policy",
-      "type": "executes_through"
-    },
-    {
-      "from": "cap.workflow.scheduler",
-      "to": "cap.control.idempotency",
-      "type": "exactly_once_via"
-    },
-    {
-      "from": "cap.workflow.scheduler",
-      "to": "cap.control.kill_switch",
-      "type": "halted_by"
-    },
-    {
-      "from": "cap.workflow.scheduler",
-      "to": "cap.control.loop_governor",
-      "type": "bounded_by"
-    },
-    {
-      "from": "cap.research.evidence",
-      "to": "cap.control.audit_log",
-      "type": "anchored_in"
-    }
-  ]
+ "nodes": [
+  {
+   "id": "cap.control.policy",
+   "description": "Default-deny capability policy with explicit per-actor grants and risk levels 0-3",
+   "implementations": [
+    "src/control_plane/policy.py"
+   ],
+   "expected_value": 0.9
+  },
+  {
+   "id": "cap.control.approvals",
+   "description": "HMAC approval tokens bound to actor, capability, operation_id, SHA-256(canonical args), expiry (max 1h)",
+   "implementations": [
+    "src/control_plane/approvals.py"
+   ],
+   "expected_value": 0.9
+  },
+  {
+   "id": "cap.control.idempotency",
+   "description": "SQLite ledger: at-most-once execution per operation_id; replay, conflict and in_doubt states",
+   "implementations": [
+    "src/control_plane/ledger.py"
+   ],
+   "expected_value": 0.85
+  },
+  {
+   "id": "cap.control.loop_governor",
+   "description": "Iteration, wall-clock and cost budgets with sticky cycle_aborted/killed states",
+   "implementations": [
+    "src/control_plane/governor.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.control.kill_switch",
+   "description": "Global in-memory + file kill switch, fail-closed, operator CLI",
+   "implementations": [
+    "src/control_plane/killswitch.py",
+    "src/control_plane/__main__.py"
+   ],
+   "expected_value": 0.85
+  },
+  {
+   "id": "cap.control.audit_log",
+   "description": "Append-only hash-chained JSONL audit with secret redaction",
+   "implementations": [
+    "src/control_plane/audit.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.control.rate_limit",
+   "description": "Per-capability token bucket",
+   "implementations": [
+    "src/control_plane/ratelimit.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.control.persistent_policy_store",
+   "description": "Durable, versioned grants with audited grant/revoke events and risk-at-grant binding",
+   "implementations": [
+    "src/control_plane/grant_store.py"
+   ],
+   "expected_value": 0.6
+  },
+  {
+   "id": "cap.orchestration.agent_runtime",
+   "description": "Bounded, model-neutral agent loop; typed proposals only, via ActorGateway; deterministic terminal states",
+   "implementations": [
+    "src/orchestrator/runner.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.tools.typed_mcp",
+   "description": "Typed tool registry + MCP tools/list descriptor adapter (candidates untrusted until accepted); no transport",
+   "implementations": [
+    "src/tools/registry.py",
+    "src/tools/mcp_adapter.py"
+   ],
+   "expected_value": 0.75
+  },
+  {
+   "id": "cap.computer.browser",
+   "description": "Browser substrate: cap.browser.fetch (stdlib GET + HTML extraction, no JS) in the sandbox via the egress proxy; JS engines deferred (R-0012)",
+   "implementations": [
+    "src/builtin_tools/browser.py",
+    "src/builtin_tools/egress_client.py",
+    "src/tools/builtins.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.memory.knowledge",
+   "description": "Provenance-tagged, HMAC-chained, budgeted, redacting memory behind the control plane; contents are untrusted data (cycle-006); cap.memory.get by id (cycle-007)",
+   "implementations": [
+    "src/memory/store.py",
+    "src/memory/handlers.py",
+    "src/memory/ingest.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.research.evidence",
+   "description": "Source registry (exact URL, stable id, candidate/untrusted/non-executable, evidence-gated lifecycle), claim ledger + verifier (fabricated/mutated citations refused; stale/contradicted -> UNKNOWN), deterministic cited research run with branch_closed (cycle-007); HMAC-chained claim ledger + audit-anchor cross-check (cycle-008)",
+   "implementations": [
+    "src/research/sources.py",
+    "src/research/ledger.py",
+    "src/research/verifier.py",
+    "src/research/extract.py",
+    "src/research/handlers.py",
+    "src/research/run.py",
+    "src/integrity/crosscheck.py"
+   ],
+   "expected_value": 0.45
+  },
+  {
+   "id": "cap.workflow.scheduler",
+   "description": "Persistent, MAC'd job definitions (interval/cron UTC); exactly-once-per-slot steps via ControlPlane idempotency; leases + crash recovery (in_doubt never retried); skip/catch-up cap; concurrency limit; kill switch; per-run governor budgets (cycle-008)",
+   "implementations": [
+    "src/scheduler/schedule.py",
+    "src/scheduler/store.py",
+    "src/scheduler/engine.py"
+   ],
+   "expected_value": 0.55
+  },
+  {
+   "id": "cap.observability.cost",
+   "description": "Telemetry + cost accounting; prerequisite for economic metrics (Cycle 8)",
+   "implementations": [],
+   "expected_value": 0.7
+  },
+  {
+   "id": "cap.security.hardening",
+   "description": "Key management, sandboxing, dependency/supply-chain controls (Cycle 9)",
+   "implementations": [],
+   "expected_value": 0.7
+  },
+  {
+   "id": "cap.revenue.workflows",
+   "description": "Autonomous revenue workflows; gated on cycles 1-9 controls (Cycle 10+)",
+   "implementations": [],
+   "expected_value": 0.4
+  },
+  {
+   "id": "cap.control.gateway",
+   "description": "Actor-bound, data-only gateway onto ControlPlane.execute; the only object an agent runtime holds",
+   "implementations": [
+    "src/control_plane/gateway.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.orchestration.provider_interface",
+   "description": "Provider-neutral str->str model interface + deterministic MockProvider",
+   "implementations": [
+    "src/orchestrator/provider.py"
+   ],
+   "expected_value": 0.7
+  },
+  {
+   "id": "cap.orchestration.proposal_parser",
+   "description": "Strict parser from untrusted model text to typed proposals",
+   "implementations": [
+    "src/orchestrator/proposal.py"
+   ],
+   "expected_value": 0.75
+  },
+  {
+   "id": "cap.tools.handler_isolation",
+   "description": "Per-call subprocess workers: env allowlist, no inherited fds, rlimits, process-group kill on timeout; host non-dumpable",
+   "implementations": [
+    "src/tools/subprocess_handler.py",
+    "src/tools/worker.py",
+    "src/control_plane/hardening.py",
+    "src/control_plane/handlers.py"
+   ],
+   "expected_value": 0.75
+  },
+  {
+   "id": "cap.tools.args_schema",
+   "description": "Strict JSON-Schema-subset argument validation enforced before execution",
+   "implementations": [
+    "src/control_plane/schema.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.tools.registry",
+   "description": "Typed tool registry with candidate/accepted/rejected trust states, audited",
+   "implementations": [
+    "src/tools/registry.py",
+    "src/tools/registry_store.py"
+   ],
+   "expected_value": 0.7
+  },
+  {
+   "id": "cap.tools.mcp_adapter",
+   "description": "MCP tools/list -> candidate capability descriptors; hints never lower risk",
+   "implementations": [
+    "src/tools/mcp_adapter.py"
+   ],
+   "expected_value": 0.6
+  },
+  {
+   "id": "cap.tools.mcp_transport",
+   "description": "MCP client transport (stdio/HTTP) behind SubprocessHandler (deferred)",
+   "implementations": [],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.tools.os_sandbox",
+   "description": "OS sandbox for workers: bubblewrap user/pid/net/mount namespaces, ro fs, no network, fail closed (cycle-004); seccomp pending (cycle-010)",
+   "implementations": [
+    "src/tools/sandbox.py"
+   ],
+   "expected_value": 0.65
+  },
+  {
+   "id": "cap.control.host_hardening",
+   "description": "ControlPlane construction enforces a non-dumpable host process (PR_SET_DUMPABLE=0) or refuses to start",
+   "implementations": [
+    "src/control_plane/hardening.py",
+    "src/control_plane/executor.py"
+   ],
+   "expected_value": 0.6
+  },
+  {
+   "id": "cap.tools.egress",
+   "description": "Deny-by-default, audited, per-capability host:port egress for sandboxed workers via a host-side Unix-socket proxy",
+   "implementations": [
+    "src/tools/egress.py"
+   ],
+   "expected_value": 0.75
+  },
+  {
+   "id": "cap.security.credential_broker",
+   "description": "Designed only: host-side credential injection in the egress proxy; models/tools see handles, never secrets (RM-0006)",
+   "implementations": [],
+   "expected_value": 0.7
+  },
+  {
+   "id": "cap.economics.ledger",
+   "description": "MAC-chained, audit-anchored economics ledger; typed Quantities with measured/configured_estimate/unknown provenance (cycle-009)",
+   "implementations": [
+    "src/economics/ledger.py",
+    "src/economics/quantity.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.economics.budget_guard",
+   "description": "Pre-execution cumulative spend caps (per day/actor/global, run, job; USD estimates and call counts) + dry run (cycle-009)",
+   "implementations": [
+    "src/economics/ledger.py",
+    "src/control_plane/executor.py"
+   ],
+   "expected_value": 0.8
+  },
+  {
+   "id": "cap.observability.status",
+   "description": "Operator status report (JSON/Markdown) + redacted JSONL export: in_doubt, quarantine, gaps, kill switch, burn, cross-checks (cycle-009)",
+   "implementations": [
+    "src/economics/status.py"
+   ],
+   "expected_value": 0.6
+  }
+ ],
+ "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
+ "edges": [
+  {
+   "from": "cap.orchestration.agent_runtime",
+   "to": "cap.control.policy",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.typed_mcp",
+   "to": "cap.orchestration.agent_runtime",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.revenue.workflows",
+   "to": "cap.observability.cost",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.revenue.workflows",
+   "to": "cap.security.hardening",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.orchestration.agent_runtime",
+   "to": "cap.control.gateway",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.orchestration.agent_runtime",
+   "to": "cap.orchestration.proposal_parser",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.orchestration.agent_runtime",
+   "to": "cap.orchestration.provider_interface",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.control.policy",
+   "to": "cap.control.persistent_policy_store",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.typed_mcp",
+   "to": "cap.tools.handler_isolation",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.typed_mcp",
+   "to": "cap.tools.args_schema",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.typed_mcp",
+   "to": "cap.tools.registry",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.registry",
+   "to": "cap.tools.mcp_adapter",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.mcp_transport",
+   "to": "cap.tools.handler_isolation",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.computer.browser",
+   "to": "cap.tools.handler_isolation",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.handler_isolation",
+   "to": "cap.tools.os_sandbox",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.computer.browser",
+   "to": "cap.tools.os_sandbox",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.control.policy",
+   "to": "cap.control.host_hardening",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.computer.browser",
+   "to": "cap.tools.egress",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.egress",
+   "to": "cap.tools.os_sandbox",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.tools.egress",
+   "to": "cap.control.audit_log",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.security.credential_broker",
+   "to": "cap.tools.egress",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.memory.knowledge",
+   "to": "cap.control.policy",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.memory.knowledge",
+   "to": "cap.control.audit_log",
+   "type": "depends_on"
+  },
+  {
+   "from": "cap.memory.knowledge",
+   "to": "cap.computer.browser",
+   "type": "ingests_from"
+  },
+  {
+   "from": "cap.research.evidence",
+   "to": "cap.memory.knowledge",
+   "type": "cites_and_verifies"
+  },
+  {
+   "from": "cap.research.evidence",
+   "to": "cap.computer.browser",
+   "type": "fetches_via"
+  },
+  {
+   "from": "cap.research.evidence",
+   "to": "cap.control.policy",
+   "type": "writes_through"
+  },
+  {
+   "from": "cap.research.evidence",
+   "to": "cap.orchestration.provider_interface",
+   "type": "tier1_mock_only"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.control.policy",
+   "type": "executes_through"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.control.idempotency",
+   "type": "exactly_once_via"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.control.kill_switch",
+   "type": "halted_by"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.control.loop_governor",
+   "type": "bounded_by"
+  },
+  {
+   "from": "cap.research.evidence",
+   "to": "cap.control.audit_log",
+   "type": "anchored_in"
+  },
+  {
+   "from": "cap.economics.budget_guard",
+   "to": "cap.control.policy",
+   "type": "denies_before_execution_in"
+  },
+  {
+   "from": "cap.economics.ledger",
+   "to": "cap.control.audit_log",
+   "type": "anchored_in"
+  },
+  {
+   "from": "cap.economics.ledger",
+   "to": "cap.tools.egress",
+   "type": "meters_via_proxy_audit"
+  },
+  {
+   "from": "cap.economics.ledger",
+   "to": "cap.orchestration.provider_interface",
+   "type": "meters_usage_of"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.economics.budget_guard",
+   "type": "scoped_by"
+  },
+  {
+   "from": "cap.observability.status",
+   "to": "cap.workflow.scheduler",
+   "type": "reports_on"
+  },
+  {
+   "from": "cap.observability.status",
+   "to": "cap.economics.ledger",
+   "type": "reports_on"
+  }
+ ]
 }

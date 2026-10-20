@@ -84,7 +84,7 @@ class RunResult:
 
 _CONTINUE = {Status.EXECUTED, Status.REPLAYED}
 _BLOCKED = {Status.DENIED, Status.REJECTED, Status.APPROVAL_INVALID, Status.CONFLICT,
-            Status.RATE_LIMITED, Status.FAILED, Status.TIMED_OUT}
+            Status.RATE_LIMITED, Status.FAILED, Status.TIMED_OUT, Status.DRY_RUN}
 _TERMINAL = {Status.KILLED: RunState.KILLED, Status.CYCLE_ABORTED: RunState.CYCLE_ABORTED,
              Status.IN_DOUBT: RunState.IN_DOUBT}
 
@@ -97,13 +97,14 @@ def operation_id_for(run_id: str, p: ActionProposal) -> str:
 class AgentRunner:
     def __init__(self, gateway: ActorGateway, providers: Sequence[ModelProvider], audit: AuditLog,
                  config: RunConfig = RunConfig(), kill_switch: KillSwitch | None = None,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic, meter=None) -> None:
         if not isinstance(gateway, ActorGateway):
             raise TypeError("AgentRunner requires an ActorGateway, not a ControlPlane or handler")
         if not providers:
             raise ValueError("at least one provider is required")
         self._gw, self._providers, self._audit = gateway, list(providers), audit
         self._cfg, self._kill, self._clock = config, kill_switch, clock
+        self._meter = meter   # EconomicsLedger (cycle-009): caps + per-call metering of provider usage
 
     # ------------------------------------------------------------------ provider call
     def _call(self, provider: ModelProvider, request_json: str) -> tuple[object, str | None]:
@@ -167,7 +168,17 @@ class AgentRunner:
                         return self._end(res, RunState.KILLED, gov.reason)
                     if state is not LoopState.RUNNING:
                         return self._end(res, RunState.CYCLE_ABORTED, gov.reason)
+                    subject, scope = f"{run_id}:model:{gov.iterations}", {"run": run_id}
+                    if self._meter is not None:
+                        ok, why, _ = self._meter.admit(self._gw.actor, f"model:{provider.name}", subject, scope)
+                        if not ok:
+                            return self._end(res, RunState.CYCLE_ABORTED, f"budget:{why}")
+                    t0 = time.perf_counter()
                     output, err = self._call(provider, request_json)
+                    if self._meter is not None:
+                        self._meter.record_model_call(subject, self._gw.actor, provider.name,
+                                                      getattr(provider, "last_usage", None),
+                                                      time.perf_counter() - t0, err, scope)
                     self._audit.append(
                         "model_call", run_id=run_id, provider=provider.name, attempt=attempt,
                         error=err, output_len=len(output) if isinstance(output, str) else None,
@@ -203,7 +214,8 @@ class AgentRunner:
             self._audit.append("proposal", run_id=run_id, operation_id=op,
                                capability=proposal.capability, args_sha256=digest)
             outcome = self._gw.submit(operation_id=op, capability=proposal.capability,
-                                      args=proposal.args, approval_token=approvals.get(op))
+                                      args=proposal.args, approval_token=approvals.get(op),
+                                      budget_scope={"run": run_id})
             res.steps.append({"kind": "action", "operation_id": op, "capability": proposal.capability,
                               "status": outcome.status.value, "reason": outcome.reason})
 

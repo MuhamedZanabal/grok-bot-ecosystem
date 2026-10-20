@@ -100,7 +100,8 @@ class Scheduler:
                 state, reason = ("killed" if ls is LoopState.KILLED else "budget_exhausted"), gov.reason
                 break
             out = self.cp.execute({"operation_id": f"job:{job_id}:{slot}:{i}", "actor": spec["actor"],
-                                   "capability": st["capability"], "args": st["args"]})
+                                   "capability": st["capability"], "args": st["args"],
+                                   "budget_scope": {"job": job_id, "run": f"{job_id}:{slot}"}})
             if out.status in (Status.EXECUTED, Status.REPLAYED):
                 self.store.step_done(job_id, slot, i + 1)
                 continue

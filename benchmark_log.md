@@ -210,3 +210,18 @@
 - **rejected:** gating.
 - **tradeoffs:** single run; runner noise.
 - **reversal criteria:** report p50 > 1 s, or any shard job > 30 min.
+
+## B-0017: Economics ledger overhead on ControlPlane.execute
+- **decision_id:** B-0017
+- **date:** 2026-10-20
+- **problem:** Cost of reserve + record + 2 audit anchors per governed operation, and whether the guard's cost grows with the day's rows.
+- **options:** n/a (measurement).
+- **evidence:** `python3 bench/bench_economics.py 300`, local box, Python 3.13.5, SQLite 3.46.1.
+  - **Final design (SQL `TOTAL()` sums, `data_version`-triggered verification):** `BENCH econ_execute n=300 p50_ms_no_ledger=0.755 p50_ms_ledger=2.096 overhead_p50_ms=1.340`, and `BENCH econ_guard_growth first50_p50_ms=1.975 last50_p50_ms=2.433 rows_at_end=600`.
+  - **First design (per-row MAC check each admit), measured before it was replaced:** `p50_ms_ledger=6.671`, growth `first50 2.641 → last50 10.095` ms at 600 rows, i.e. O(rows today).
+  - The CI 3.13 runner number is recorded in I-0025.
+- **selected:** the final design.
+- **tradeoffs:**
+  - About 1.3 ms p50 per governed op, mostly two fsync'd audit appends plus two SQLite commits.
+  - The first admit after any external write re-verifies the full chain (O(all rows)).
+- **reversal criteria:** overhead_p50 above 5 ms on CI, or growth beyond 2× across a day.

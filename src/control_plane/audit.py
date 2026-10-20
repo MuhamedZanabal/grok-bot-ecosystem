@@ -60,6 +60,7 @@ class AuditLog:
         self.path = path
         self._lock = threading.Lock()
         self._seq, self._prev = 0, GENESIS
+        self.listeners: list = []   # host-side observers, e.g. economics egress meter (cycle-009)
         if os.path.exists(path):
             ok, count, err = self.verify()
             if not ok:
@@ -83,7 +84,9 @@ class AuditLog:
             finally:
                 os.close(fd)
             self._seq, self._prev = record["seq"], record["hash"]
-            return record
+        for fn in self.listeners:
+            fn(event, record["data"])
+        return record
 
     def verify(self) -> tuple[bool, int, str]:
         return verify_chain(self.path)
