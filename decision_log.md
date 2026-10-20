@@ -413,3 +413,78 @@
 - **rejected:** silently truncating oversized content (it would change the content hash and meaning without notice).
 - **tradeoffs:** a dedup hit hides the second origin URL (it is still in the audit log via the decision's args hash, but not in the record).
 - **reversal criteria:** a research cycle needs multi-provenance records → add a `sightings` table keyed by `content_sha256`.
+
+## D-0020: cycle-007 definition (research/evidence engine), recorded before code
+- **decision_id:** D-0020
+- **date:** 2026-10-20
+- **problem:** RM-0008. Research output must be reproducible and cited. Every claim must point to verifiable evidence (a source plus a MAC-verified memory record), and sources must follow the Source Handling rules:
+  - exact URL;
+  - stable id;
+  - candidate / `execution_allowed=false` / `trusted=false` by default;
+  - lifecycle changes only with recorded evidence.
+
+  Today nothing enforces any of this.
+- **options:**
+  - Registry placement: (r1) an in-process library the research loop writes directly; (r2) repository-owned `TrustedHostHandler` capabilities behind `ControlPlane` (policy, idempotency, audit), with the run holding only an actor gateway for writes.
+  - Source id: (i1) a normalized URL (lowercase host, strip trailing slash, etc.); (i2) `src:` + SHA-256 of the exact URL bytes, with no normalization.
+  - Claim evidence: (e1) a URL only; (e2) a pointer `{source_id, record_id, content_sha256, quote}` re-verified against the MAC-chained memory store on every read.
+  - Extraction: (x1) model-first; (x2) Tier 0 deterministic regex extraction first, with the model (MockProvider only) consulted only when Tier 0 finds nothing. Model output is parsed as data and its claims pass the same verifier.
+- **evidence:**
+  - D-0018 / I-0018: memory records carry the exact `origin_url`, `content_sha256` and a MAC that is verified on read (CI run 39342990292).
+  - `cap.browser.fetch` is EXTERNAL risk and needs an HMAC approval per operation (cycle-005).
+  - The existing tool registry already uses candidate / `execution_allowed=false` for MCP imports (`tests/test_tool_registry.py:75`).
+- **selected:** r2, i2, e2, x2.
+  - **Lifecycle:** `candidate→evaluating` (needs a verified memory record whose `origin_url` equals the source URL exactly); `evaluating→accepted` (needs a *verified* claim citing the source); `evaluating→rejected|deferred` (needs record or claim evidence); `deferred→evaluating` (needs a record). All other transitions are refused.
+  - **Trust:** `accepted` never implies `trusted` or `execution_allowed`. No capability path can set either.
+  - **Verifier refuses a claim** when:
+    - it has no evidence;
+    - a record is missing or tampered;
+    - the cited hash differs from the stored one;
+    - the record's origin differs from the source URL (URL mutation);
+    - the quote is not in the record;
+    - the quote does not contain the attribute and value;
+    - the subject is not in the record.
+  - **Verifier marks a claim UNKNOWN** (it is stored but not used) when:
+    - its evidence has expired (stale) or has since become unverifiable;
+    - its source was rejected;
+    - another verified claim gives the same `(subject, attribute)` a different value (contradicted).
+  - **`branch_closed`:** each branch records a comparable metric (name and direction). A discovery pass is "superior" only if a verified, non-contradicted metric claim beats the incumbent. After 3 consecutive non-superior passes the branch is closed, persisted and audited, and further passes are refused before any fetch.
+  - **Report:** a canonical JSON artifact plus Markdown, with numbered citations (`source_id`, exact URL, `record_id`, `content_sha256`, quote). It is byte-identical for identical inputs.
+- **cycle definition:**
+  - cycle_id: `cycle-007-research`
+  - objective: a source registry, claim ledger and verifier, plus a deterministic cited research run over local fixtures, all writes through `ControlPlane`.
+  - capability area: `cap.research.evidence`
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-7/research`, one PR; ≤ ~700 new production lines; stdlib only; local fixture HTTP servers only; MockProvider only.
+  - success metric (locally and in CI):
+    1. 100% of tests pass, with no skips.
+    2. A research adversarial set (≥ 14 cases) gives 0 violations. Cases:
+       - fabricated record / hash / quote citations;
+       - a mock-model fabricated citation;
+       - URL mutation (registry and redirect);
+       - source self-promoting trust (content and args);
+       - transitions that are illegal or lack evidence;
+       - a claim without evidence;
+       - contradictory sources;
+       - stale evidence;
+       - tampered evidence after a claim;
+       - a claim from a rejected source;
+       - injected actions via the model.
+    3. `branch_closed` fires after exactly 3 non-superior passes, and a later pass performs 0 fetches.
+    4. The report is byte-identical across two fresh runs, and every claim in it has ≥ 1 resolvable citation.
+    5. Prior adversarial sets are unchanged (20/0, 18/0, 20/0, 21/0, 26/0, memory 15/0).
+    6. Every new mutant is killed.
+  - expected_value: medium-high (gives later cycles cited, auditable inputs).
+  - estimated_cost: ESTIMATE one agent session; token and dollar cost UNKNOWN.
+  - expected_revenue: 0.
+  - risk: medium (new host TCB handlers).
+  - confidence: medium-high.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:**
+  - r1: research-loop bugs could write trust state without policy or audit.
+  - i1: normalization merges distinct URLs and hides URL mutation.
+  - e1: a URL alone proves nothing about content.
+  - x1: makes the model the source of truth, and it is non-deterministic.
+- **tradeoffs:**
+  - Fetches still need an operator approval per operation (EXTERNAL risk).
+  - The claim ledger rows are not MAC'd. They are re-verified against MAC'd memory, but subject and value binding rely on quote matching.
+- **reversal criteria:** any adversarial violation, or report non-determinism.
