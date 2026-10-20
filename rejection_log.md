@@ -168,3 +168,18 @@
 - **rejected:** the above.
 - **tradeoffs:** a lexical, regex Tier 0 handles only `attribute=value` text.
 - **reversal criteria:** a measured research task where Tier 0 + Tier 1 literal quoting recovers too few claims.
+
+## R-0015: Scheduler designs not chosen (cycle-008)
+- **decision_id:** R-0015
+- **date:** 2026-10-20
+- **problem:** Alternatives in D-0022 and D-0023.
+- **options / evidence:**
+  - **Jobs as an agent-callable capability:** CP handlers receive args only, not the calling actor. A `job_define` capability therefore could not bind the owner safely, so an agent could define a job running as anyone. The `privilege_escalation_definitions` case shows the host API refuses 8 escalation shapes.
+  - **Retrying in-doubt steps:** that is double execution when the first attempt had its effect. The `crash_mid_step` case requires `in_doubt`, and the test shows `begins {0: 1, 1: 1}`.
+  - **Catching up on every missed slot:** unbounded work after an outage. `forward_jump` caps a 1-year jump at 3 runs plus 1 gap row.
+  - **Trusting the wall clock monotonically:** a backwards jump could re-open slots. The per-job `high_water` prevents that (`backwards_clock` case).
+  - **Third-party schedulers (APScheduler, celery beat):** non-stdlib, and they do not route through ControlPlane idempotency.
+- **selected:** D-0022 and D-0023.
+- **rejected:** the above.
+- **tradeoffs:** `in_doubt` runs need an operator.
+- **reversal criteria:** a workload that needs at-least-once semantics, together with idempotent downstream effects proven per capability.

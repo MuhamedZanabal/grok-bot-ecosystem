@@ -182,3 +182,18 @@
 - **rejected:** gating.
 - **tradeoffs:** single run; runner noise.
 - **reversal criteria:** as B-0013.
+
+## B-0015: Scheduler tick cost
+- **decision_id:** B-0015
+- **date:** 2026-10-20
+- **problem:** Measure scheduler overhead through the control plane.
+- **options:** n/a (measurement).
+- **evidence:** local box, `python3 bench/bench_scheduler.py 200`:
+  - `BENCH scheduler_tick_run n=200 p50_ms=2.858 p95_ms=8.072 jobs=2`
+  - `BENCH scheduler_tick_idle n=200 p50_ms=0.293 max_begins=1`
+
+  A tick that runs one 1-step job covers the claim, the lease, the governor, `ControlPlane.execute` (in-process test handler), finish and audit.
+- **selected:** informational. CI runs the same bench.
+- **rejected:** gating.
+- **tradeoffs:** in-process handler only; a sandboxed step adds about 36 ms (B-0010). `tick` scans all jobs and runs, which is O(jobs + runs); untested beyond 2 jobs and 200 runs (UNKNOWN).
+- **reversal criteria:** idle tick p50 > 50 ms at 1k jobs.

@@ -7,7 +7,7 @@ import sys
 import tempfile
 import unittest
 
-from tests.research_helpers import ResearchHarness, fixture
+from tests.research_helpers import CLAIM_KEY, ResearchHarness, fixture
 from orchestrator import MockProvider
 from research import CLOSE_AFTER, ClaimLedger, SourceError, SourceRegistry, source_id_for, write_report
 
@@ -115,7 +115,7 @@ class ResearchRunTests(unittest.TestCase):
         self.assertEqual(len(ev), 1)
         self.assertEqual(ev[0]["passes"], 5)
         self.assertEqual(CLOSE_AFTER, 3)
-        led = ClaimLedger(os.path.join(self.r.h.dir.name, "claims.sqlite"))  # persisted
+        led = ClaimLedger(os.path.join(self.r.h.dir.name, "claims.sqlite"), CLAIM_KEY)  # persisted
         b = led.branch(bid)
         led.close()
         self.assertEqual((b["status"], b["best_value"], b["stale_passes"]), ("closed", 30.0, 3))

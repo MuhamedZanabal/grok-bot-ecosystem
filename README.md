@@ -130,6 +130,19 @@ deterministic `MockProvider` ships; no real model API is called.
   - `branch_closed` fires after 3 consecutive passes with no superior candidate on the recorded metric.
   - `write_report` emits a byte-deterministic, cited `report.json` and `report.md`.
 
+## cycle-008-scheduler: evidence hardening + workflow scheduler
+
+- **Claim ledger:** now an HMAC chain (`ClaimLedger(path, key)`). Each new claim's `(seq, mac)` is anchored in the audit log.
+- **`python -m integrity`** (`integrity.crosscheck`) verifies the audit chain, then checks that every anchored row is present and unaltered, that every row is anchored, and that each store chain is intact. Research reports mark claims `UNKNOWN` on any failure. `scripts/crosscheck_ci.py` runs this in CI.
+- **`scheduler.Scheduler`:**
+  - Jobs are defined only through the operator API, MAC'd, and limited to steps of LOCAL_WRITE risk or lower that the actor is granted.
+  - Each run is a governor-bounded loop of `ControlPlane.execute` calls with `operation_id = job:<id>:<slot>:<step>`, so a step's effect happens at most once even across a crash or restart.
+  - Missed slots follow an explicit policy (`skip`, or `catch_up` with a cap).
+  - A global lease limit defers excess slots, and an overlapping slot is skipped.
+  - The kill switch halts the scheduler.
+  - A backwards clock is audited and never re-opens old slots.
+  - Clocks are injectable.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
@@ -139,6 +152,9 @@ python3 bench/bench_tools.py 50                    # sandboxed tool call overhea
 python3 bench/bench_browser.py 30                  # browser fetch via egress proxy (local fixture)
 python3 bench/bench_memory.py 200                  # memory write/search via the control plane
 python3 bench/bench_research.py 50                 # one research pass + report (local fixture)
+python3 bench/bench_scheduler.py 200               # scheduler tick through the control plane
+python3 scripts/crosscheck_ci.py                   # store vs audit-anchor cross-check (clean + tampers)
+MUTANT_SHARD=0/3 bash scripts/mutation_check.sh    # one of three mutation shards (CI runs one per job)
 MUTANT_ONLY='sandbox' bash scripts/mutation_check.sh  # local iteration on a subset
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl

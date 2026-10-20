@@ -583,3 +583,31 @@
   - Cron is UTC only, with no DST semantics.
   - Mutation results are spread across Python versions.
 - **reversal criteria:** any double execution, escalation, or violation.
+
+## D-0023: cycle-008 implementation choices (incl. mutation sharding)
+- **decision_id:** D-0023
+- **date:** 2026-10-20
+- **problem:** Implement D-0022 within budget and keep CI wall time reasonable.
+- **options / evidence:**
+  - **Claim ledger chain:**
+    - `ClaimLedger(path, key)` now needs a key of at least 32 bytes.
+    - Rows carry `seq`, `prev_mac` and `mac`; the MAC is HMAC-SHA256 over every other column.
+    - Reads drop rows whose MAC fails; `verify_chain` checks contiguous `seq` and `prev_mac`.
+    - The claim handler anchors `{seq, mac}` of each *new* claim in `claim_recorded`.
+    - Evidence: `LEDGER_TAMPER detected=6/6`. Edit, middle delete and memory edit are caught by the chain; tail delete, a forged insert made with the key, and memory tail truncation are caught by the audit anchors.
+  - **Report:** `ResearchRun.report` now runs `integrity.crosscheck` over the claims and memory stores. Any failure marks every claim `UNKNOWN [store_integrity:<store>]`; `store_integrity_ok` is reported.
+  - **CI cross-check:** `scripts/crosscheck_ci.py` drives a real research run against the fixture, then calls `python -m integrity` (the CLI reads keys from files and never from argv) on the clean store and after each of 6 tampers. It prints `CROSSCHECK ...`.
+  - **Scheduler module split:**
+    - `schedule.py` (interval and 5-field UTC cron; cron gaps over 366 days are counted as `-1` = UNKNOWN);
+    - `store.py` (MAC'd jobs, `runs` PK `(job_id, slot)`, leases, a `take_over` compare-and-swap, `gaps`, wall-clock high-water);
+    - `engine.py` (`define` and `tick`).
+  - **Crash simulation:** a handler raises `BaseException` (`Crash`). It escapes `ControlPlane._run` (`except Exception`) and leaves the ledger PENDING, as a real process death would. Recovery then sees `IN_DOUBT` and never re-executes.
+  - **Exactly-once evidence:** the count of `execute_begin` audit records per `operation_id` is at most 1 in every adversarial case (`max_begins_per_op=1`).
+  - **Mutation sharding:** the cycle-007 3.13 job took 21m37s for 94 mutants. Local timing for cycle-8 is 24 new mutants in 468 s, which projects to about 27 min for 118 mutants on one job. I chose `MUTANT_SHARD=i/n` (index mod n), one shard per matrix job (3.11→0/3, 3.12→1/3, 3.13→2/3). Each job asserts it ran exactly its shard's count, and all 3 jobs are required, so the union is the full set.
+  - **Excluded mutant:** "high_water not advanced" is not in the set. The `runs` primary key and CP idempotency are defense in depth that make it near-equivalent: re-claims fail and no step runs twice. It is recorded as a known equivalent class, not as a kill.
+- **selected:** as above.
+- **rejected:** a single 3.13 mutation job (wall time); a separate mutation-only job (it would need its own bubblewrap setup and add a 4th runner).
+- **tradeoffs:**
+  - A mutant's kill is now observed under one Python version only.
+  - A shard's wall time depends on which mutants land in it.
+- **reversal criteria:** a mutant that survives only on some Python version, or a shard job above 20 min.

@@ -1,5 +1,10 @@
 """Claim ledger + branch bookkeeping (cycle-007, D-0020). Persisted in SQLite.
 
+cycle-008 (D-0022): claims form an HMAC-SHA256 chain (seq, prev_mac, mac) under an operator
+key, like memory. Rows whose MAC fails are excluded from every read; verify_chain() detects
+edits, deletions and reordering; each new claim's (seq, mac) is anchored in the audit log
+by the claim handler so tail truncation is caught by integrity.crosscheck.
+
 A claim is (branch_id, subject, attribute, value) plus evidence pointers
 [{source_id, record_id, content_sha256, quote}]. Admission and every read go through
 research.verifier; this module only stores. Branches record a comparable metric
@@ -7,6 +12,7 @@ research.verifier; this module only stores. Branches record a comparable metric
 """
 
 import hashlib
+import hmac
 import json
 import sqlite3
 import threading
@@ -17,7 +23,8 @@ CLOSE_AFTER = 3  # consecutive discovery passes with no superior candidate
 _SCHEMA = (
     """CREATE TABLE IF NOT EXISTS claims (
          claim_id TEXT PRIMARY KEY, branch_id TEXT NOT NULL, subject TEXT NOT NULL, attribute TEXT NOT NULL,
-         value TEXT NOT NULL, origin TEXT NOT NULL, evidence TEXT NOT NULL, created_at REAL NOT NULL)""",
+         value TEXT NOT NULL, origin TEXT NOT NULL, evidence TEXT NOT NULL, created_at REAL NOT NULL,
+         seq INTEGER NOT NULL UNIQUE, prev_mac TEXT NOT NULL, mac TEXT NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS branches (
          branch_id TEXT PRIMARY KEY, question TEXT NOT NULL, metric TEXT NOT NULL, direction TEXT NOT NULL,
          min_delta REAL NOT NULL, config TEXT NOT NULL, best_value REAL, best_claim TEXT, best_source TEXT,
@@ -27,7 +34,10 @@ _SCHEMA = (
          branch_id TEXT NOT NULL, n INTEGER NOT NULL, superior INTEGER NOT NULL, pass_best REAL,
          pass_best_claim TEXT, incumbent REAL, PRIMARY KEY (branch_id, n))""",
 )
-_CLAIM = ("claim_id", "branch_id", "subject", "attribute", "value", "origin", "evidence", "created_at")
+_CLAIM = ("claim_id", "branch_id", "subject", "attribute", "value", "origin", "evidence", "created_at", "seq",
+          "prev_mac", "mac")
+_MAC_FIELDS = _CLAIM[:-1]
+GENESIS = "0" * 64
 _BRANCH = ("branch_id", "question", "metric", "direction", "min_delta", "config", "best_value", "best_claim",
            "best_source", "stale_passes", "passes", "status", "closed_reason")
 
@@ -44,7 +54,10 @@ def better(value: float, incumbent: float | None, direction: str, min_delta: flo
 
 
 class ClaimLedger:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, key: bytes) -> None:
+        if not isinstance(key, bytes) or len(key) < 32:
+            raise ValueError("claim ledger MAC key must be >= 32 bytes")
+        self._key = key
         self._lock = threading.Lock()
         self._db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
         self._db.execute("PRAGMA synchronous=FULL")
@@ -55,23 +68,60 @@ class ClaimLedger:
         self._db.close()
 
     # ---------------------------------------------------------------- claims
-    def add(self, branch_id, subject, attribute, value, origin, evidence, now) -> tuple[str, bool]:
+    def _mac(self, row: dict) -> str:
+        return hmac.new(self._key, canonical_json({k: row[k] for k in _MAC_FIELDS}).encode(), hashlib.sha256).hexdigest()
+
+    def add(self, branch_id, subject, attribute, value, origin, evidence, now) -> dict:
+        """Returns {claim_id, created, seq, mac}; an existing claim is returned unchanged."""
         cid = claim_id_for(branch_id, subject, attribute, value, evidence)
         with self._lock:
-            cur = self._db.execute(f"INSERT OR IGNORE INTO claims ({', '.join(_CLAIM)}) VALUES (?,?,?,?,?,?,?,?)",
-                                   (cid, branch_id, subject, attribute, value, origin, canonical_json(evidence), now))
-        return cid, cur.rowcount == 1
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                old = self._db.execute("SELECT seq, mac FROM claims WHERE claim_id=?", (cid,)).fetchone()
+                if old is not None:
+                    self._db.execute("COMMIT")
+                    return {"claim_id": cid, "created": False, "seq": old[0], "mac": old[1]}
+                last = self._db.execute("SELECT seq, mac FROM claims ORDER BY seq DESC LIMIT 1").fetchone()
+                row = {"claim_id": cid, "branch_id": branch_id, "subject": subject, "attribute": attribute,
+                       "value": value, "origin": origin, "evidence": canonical_json(evidence), "created_at": now,
+                       "seq": (last[0] if last else 0) + 1, "prev_mac": last[1] if last else GENESIS}
+                row["mac"] = self._mac(row)
+                self._db.execute(f"INSERT INTO claims ({', '.join(_CLAIM)}) VALUES ({', '.join('?' * len(_CLAIM))})",
+                                 tuple(row[k] for k in _CLAIM))
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+        return {"claim_id": cid, "created": True, "seq": row["seq"], "mac": row["mac"]}
+
+    def _rows(self, where: str = "1=1", args: tuple = (), order: str = "claim_id") -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(f"SELECT {', '.join(_CLAIM)} FROM claims WHERE {where} ORDER BY {order}",
+                                    args).fetchall()
+        return [dict(zip(_CLAIM, r)) for r in rows]
 
     def _claims(self, where: str, args: tuple) -> list[dict]:
-        with self._lock:
-            rows = self._db.execute(f"SELECT {', '.join(_CLAIM)} FROM claims WHERE {where} ORDER BY claim_id",
-                                    args).fetchall()
         out = []
-        for r in rows:
-            c = dict(zip(_CLAIM, r))
+        for c in self._rows(where, args):
+            if not hmac.compare_digest(self._mac(c), c["mac"]):
+                continue  # tampered row: never returned (verify_chain reports it)
             c["evidence"] = json.loads(c["evidence"])
             out.append(c)
         return out
+
+    def verify_chain(self) -> tuple[bool, int, str]:
+        prev = GENESIS
+        rows = self._rows(order="seq")
+        for i, row in enumerate(rows, 1):
+            if row["seq"] != i or row["prev_mac"] != prev:
+                return False, row["seq"], "chain_break"
+            if not hmac.compare_digest(self._mac(row), row["mac"]):
+                return False, row["seq"], "mac_mismatch"
+            prev = row["mac"]
+        return True, len(rows), ""
+
+    def anchor_rows(self) -> list[tuple[int, str]]:
+        return [(r["seq"], r["mac"]) for r in self._rows(order="seq")]
 
     def get(self, claim_id: str) -> dict | None:
         rows = self._claims("claim_id=?", (claim_id,))

@@ -123,6 +123,10 @@ class MemoryStore:
             prev = row["mac"]
         return True, len(rows), ""
 
+    def anchor_rows(self) -> list[tuple[int, str]]:
+        with self._lock:
+            return [(r[0], r[1]) for r in self._db.execute("SELECT seq, mac FROM records ORDER BY seq")]
+
     def head(self) -> str:
         with self._lock:
             r = self._db.execute("SELECT mac FROM records ORDER BY seq DESC LIMIT 1").fetchone()

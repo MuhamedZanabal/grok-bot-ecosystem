@@ -367,3 +367,41 @@
 - **rejected:** merging in-cycle.
 - **tradeoffs:** S-0009 gaps stand.
 - **reversal criteria:** any later red run on this branch.
+
+## I-0022: PR #7 merged
+- **decision_id:** I-0022
+- **date:** 2026-10-20
+- **problem:** Merge cycle-007 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 7` gave `test (3.11) pass 56s`, `test (3.12) pass 55s`, `test (3.13) pass 21m37s` (run 39351689327 on head `b66ca8b`).
+  - `gh pr merge 7 --merge --match-head-commit b66ca8beca6b9f3daf7905c570e1e135ef39967e`.
+  - `gh pr view 7` gave `MERGED`, `mergeCommit 2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8`, `mergedAt 2026-10-20T01:31:02Z` (04:31 UTC+3).
+- **selected:** main = `2bbfa92`, the baseline for cycle-008.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.
+
+## I-0023: cycle-008-scheduler integrated on branch `cycle-8/scheduler`
+- **decision_id:** I-0023
+- **date:** 2026-10-20
+- **problem:** Integrate D-0022 scope.
+- **options:** D-0022, D-0023, R-0015.
+- **evidence:**
+  - **Production code** (budget ≤ 700; hardening ≤ 150, scheduler ≤ 550):
+    - `src/scheduler/*`: 385 lines;
+    - `src/integrity/*`: 81 lines;
+    - edits to `src/research/{ledger,handlers,run}.py` and `src/memory/store.py`: +80 / −16;
+    - total about 530 new lines, within budget; hardening about 145 net, scheduler 385. Stdlib only.
+  - **Tests:** `python3 -m unittest discover -s tests -t .` gave `Ran 191 tests ... OK` on 3.13.5, uv 3.11 and uv 3.12, with no skips.
+  - **New outputs:**
+    - `LEDGER_TAMPER detected=6/6 via={claim_delete_middle: chain, claim_delete_tail: anchor, claim_edit: chain, claim_forged_insert_with_key: anchor, memory_edit_content: chain, memory_truncate_tail: anchor}`
+    - `SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1`
+    - `python3 scripts/crosscheck_ci.py` gave `CROSSCHECK clean ok=True audit_records=142 memory_rows=5 claim_rows=10` and `CROSSCHECK tampers=6 detected=6 failures=[]`.
+  - **Prior sets:** unchanged (`RESEARCH_ADVERSARIAL 16/0`, and the rest per CI).
+  - **Mutation:** the 3 shards run sequentially gave `MUTATION mutants=40 killed=40 shard=0/3` (619 s), `39/39 shard=1/3` (618 s) and `39/39 shard=2/3` (604 s), i.e. 118/118 with each `exit=0`. Before the run, all 24 new mutants were checked to apply a 1-line diff and compile.
+  - **Cleanup:** `pgrep -fa "worker.py|sleep 35|mutation_check"` gave none.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** S-0010.
+- **reversal criteria:** any CI failure or violation.

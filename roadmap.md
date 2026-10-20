@@ -132,3 +132,17 @@
 - **rejected:** scheduler first (it would automate over an unverifiable ledger).
 - **tradeoffs:** delays workflows by a cycle.
 - **reversal criteria:** the user prioritizes workflows or revenue.
+
+## RM-0010: After cycle-008
+- **decision_id:** RM-0010
+- **date:** 2026-10-20
+- **problem:** Next target.
+- **options:**
+  - (a) cost and observability (metering, per-job/per-run spend, alerts for `in_doubt` and quarantine);
+  - (b) an external audit witness (anchoring the audit head outside the box);
+  - (c) revenue workflows.
+- **evidence:** cycle-008 introduced unattended runs whose spend is unmetered (`estimated_cost` is UNKNOWN in every cycle so far), and `in_doubt` / quarantine states that nobody is alerted to (S-0010 gap 3).
+- **selected:** cycle-009 = (a), cost and observability, scoped to per-run metering through the governor plus an operator status report (`in_doubt`, quarantined, skipped gaps).
+- **rejected:** (c) before metering.
+- **tradeoffs:** (b) deferred.
+- **reversal criteria:** the user prioritizes revenue or external anchoring.

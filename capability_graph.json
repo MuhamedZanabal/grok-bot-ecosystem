@@ -104,21 +104,26 @@
     },
     {
       "id": "cap.research.evidence",
-      "description": "Source registry (exact URL, stable id, candidate/untrusted/non-executable, evidence-gated lifecycle), claim ledger + verifier (fabricated/mutated citations refused; stale/contradicted -> UNKNOWN), deterministic cited research run with branch_closed (cycle-007)",
+      "description": "Source registry (exact URL, stable id, candidate/untrusted/non-executable, evidence-gated lifecycle), claim ledger + verifier (fabricated/mutated citations refused; stale/contradicted -> UNKNOWN), deterministic cited research run with branch_closed (cycle-007); HMAC-chained claim ledger + audit-anchor cross-check (cycle-008)",
       "implementations": [
         "src/research/sources.py",
         "src/research/ledger.py",
         "src/research/verifier.py",
         "src/research/extract.py",
         "src/research/handlers.py",
-        "src/research/run.py"
+        "src/research/run.py",
+        "src/integrity/crosscheck.py"
       ],
       "expected_value": 0.45
     },
     {
       "id": "cap.workflow.scheduler",
-      "description": "Workflow/scheduling engine (Cycle 7)",
-      "implementations": [],
+      "description": "Persistent, MAC'd job definitions (interval/cron UTC); exactly-once-per-slot steps via ControlPlane idempotency; leases + crash recovery (in_doubt never retried); skip/catch-up cap; concurrency limit; kill switch; per-run governor budgets (cycle-008)",
+      "implementations": [
+        "src/scheduler/schedule.py",
+        "src/scheduler/store.py",
+        "src/scheduler/engine.py"
+      ],
       "expected_value": 0.55
     },
     {
@@ -378,6 +383,31 @@
       "from": "cap.research.evidence",
       "to": "cap.orchestration.provider_interface",
       "type": "tier1_mock_only"
+    },
+    {
+      "from": "cap.workflow.scheduler",
+      "to": "cap.control.policy",
+      "type": "executes_through"
+    },
+    {
+      "from": "cap.workflow.scheduler",
+      "to": "cap.control.idempotency",
+      "type": "exactly_once_via"
+    },
+    {
+      "from": "cap.workflow.scheduler",
+      "to": "cap.control.kill_switch",
+      "type": "halted_by"
+    },
+    {
+      "from": "cap.workflow.scheduler",
+      "to": "cap.control.loop_governor",
+      "type": "bounded_by"
+    },
+    {
+      "from": "cap.research.evidence",
+      "to": "cap.control.audit_log",
+      "type": "anchored_in"
     }
   ]
 }

@@ -9,6 +9,7 @@ from tests.memory_helpers import attach_memory
 from tools import ToolRegistry, register_browser_fetch
 
 ACTOR = "agent.research"
+CLAIM_KEY = b"c" * 32
 CAPS = ("cap.browser.fetch", "cap.memory.write", "cap.memory.get", "cap.memory.search",
         "cap.research.source_register", "cap.research.source_transition", "cap.research.claim_record")
 
@@ -52,7 +53,7 @@ class ResearchHarness:
         register_browser_fetch(ToolRegistry(self.h.policy, self.h.cp, self.h.audit), (fx.entry,), by="zanabal")
         d = self.h.dir.name
         self.sources = SourceRegistry(os.path.join(d, "sources.sqlite"))
-        self.ledger = ClaimLedger(os.path.join(d, "claims.sqlite"))
+        self.ledger = ClaimLedger(os.path.join(d, "claims.sqlite"), CLAIM_KEY)
         self.verifier = Verifier(self.mem, self.sources, self.ledger, self.h.wall, max_age_s=max_age_s)
         self.ctx = ResearchContext(self.sources, self.ledger, self.mem, self.verifier, self.h.audit, self.h.wall)
         register_research(self.h.policy, self.h.cp, self.ctx)
