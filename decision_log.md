@@ -829,3 +829,40 @@
   - Most real leads (68/94) have no public email and get no draft. WhatsApp and walk-in channels are not modelled.
   - Name-key dedupe can merge two different businesses that share a name.
 - **reversal criteria:** any invented fact, or any send path without a token.
+
+## D-0028: cycle-011 definition (Gmail two-phase handoff transport), recorded before work
+- **decision_id:** D-0028
+- **date:** 2026-10-20
+- **problem:**
+  - PR #10 merged (`a887a7bc0a6cec0b40cda470d69328c45e2fe476`). The user chose to connect the outreach pipeline to their Gmail (zanabalmuhamed@gmail.com) and send the 9 pending ZAIPOS drafts through the caps.
+  - The repo's Python code cannot call the Gmail connector (the connector lives in the agent runtime, not in this process), so a direct `transport.send` is impossible.
+  - The user granted standing permission on 2026-10-20 to send ZAIPOS drafts once the pipeline is merged. S-0012 gap 1: the approval key sits in the shared state folder.
+- **options:**
+  - (h1) Give Python a Gmail credential and an HTTP client. (h2) A two-phase handoff: Python *reserves* sends through `cap.outreach.send` and emits a manifest; the external sender (the agent with the Gmail connector) sends exactly the manifest entries, then Python *records* the result through a governed confirm capability.
+  - Approval: (p1) one human-typed token per draft; (p2) a standing-permission grant recorded in the outbox and audit log, from which an issuer mints one token per draft bound to draft hash, recipient, channel, mode and grant reference.
+- **selected:** h2, p2.
+  - `python -m outreach send-plan`: for each `pending_approval` draft, the issuer mints a token and calls `cap.outreach.send` with `mode=handoff`. The handler re-checks MAC, hash, opt-out line, suppression and caps (4/day, 1/recipient/day, 2/recipient total; reservations count) inside one transaction, and inserts a reservation instead of calling a transport. Output: a manifest (reservation id, recipient, subject, body file, body sha256, expiry) plus read-only body files.
+  - `record-sent --reservation R --message-id M` / `record-failed`: through `cap.outreach.confirm` (LOCAL_WRITE). Confirming twice is an idempotent replay or a conflict, never a second send row. An unknown reservation is refused.
+  - Reservations not confirmed before expiry become `in_doubt`. They keep counting against caps and are never re-planned.
+  - `record-reply`: through `cap.outreach.reply`. Opt-out keywords (stop, unsubscribe, not interested, remove me, opt out) suppress the sender and set the outcome; open reservations to that recipient are cancelled.
+  - Every body must contain the opt-out line; enqueue and send refuse otherwise.
+  - The approval key moves out of the state dir (explicit path, env var, or `~/.config/grok-bot/`); a key inside the state dir or readable by group/other is refused.
+- **cycle definition:**
+  - cycle_id: `cycle-011-gmail-transport`
+  - objective: a governed two-phase handoff transport so the user can send approved ZAIPOS drafts via Gmail within caps, with every send planned, token-bound and recorded.
+  - capability areas: `cap.outreach.send` (risk 3, new mode `handoff`), `cap.outreach.confirm` (new), `cap.outreach.reply` (new), standing approval issuer.
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-011-gmail-transport`, one PR; **production code ≤ 600 new lines**; stdlib only; no network; **0 real sends; no Gmail send tool called**.
+  - success metric (locally and in CI):
+    1. 100% of tests pass on 3.11, 3.12 and 3.13.
+    2. A handoff adversarial set (≥ 8 cases) gives 0 violations: confirming a reservation that is not in the manifest / unknown; confirming the same reservation twice; cap evasion (re-plan, variants, failed-then-replan, in-doubt); suppressed recipient after opt-out; body edited after planning (file and DB); token without a recorded grant or for a revoked/exhausted grant; key custody (key inside state dir or world-readable refused).
+    3. The cycle-010 outreach adversarial set stays 15/0; prior sets, cross-check and status CI unchanged.
+    4. Every new mutant is killed in the sharded mutation check.
+    5. A synthetic end-to-end CLI run (grant → send-plan → verify-manifest → record-sent/failed → record-reply) is in CI.
+  - expected_value: high (unblocks the user's approved sends).
+  - estimated_cost: ESTIMATE one agent session; dollar cost UNKNOWN.
+  - expected_revenue: UNKNOWN.
+  - risk: medium-high (real outbound email after merge); mitigated by token binding, caps, manifest verification and the human/agent doing the actual send.
+  - confidence: medium.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:** h1 (puts a mail credential in the repo runtime and gives Python a send path the user did not ask for); p1 (the user granted standing permission; per-draft binding is kept by minting per-draft tokens).
+- **reversal criteria:** any send recorded without a reservation, any reservation beyond caps, any re-plan of an in-doubt or sent draft, or any send to a suppressed recipient that the tools did not flag.
