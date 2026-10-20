@@ -488,3 +488,22 @@
   - Fetches still need an operator approval per operation (EXTERNAL risk).
   - The claim ledger rows are not MAC'd. They are re-verified against MAC'd memory, but subject and value binding rely on quote matching.
 - **reversal criteria:** any adversarial violation, or report non-determinism.
+
+## D-0021: cycle-007 implementation choices
+- **decision_id:** D-0021
+- **date:** 2026-10-20
+- **problem:** Implement D-0020 within the control plane's existing constraints.
+- **options / evidence:**
+  - **Capability ids:** `policy.CAPABILITY_ID` is `^cap\.[a-z0-9_]+\.[a-z0-9_]+$`. The first attempt, `cap.research.source.register`, raised `ValueError: invalid capability id`. The ids became `cap.research.source_register`, `cap.research.source_transition` and `cap.research.claim_record` (all `LOCAL_WRITE`), each a `TrustedHostHandler`.
+  - **Reading records:** extraction needs a record's exact stored content. `cap.memory.search` is fuzzy, so I added `cap.memory.get` (READ, by `record_id`). It verifies MAC and hash, wraps the result as `untrusted_data`, and audits `memory_tamper_detected` on failure.
+  - **Evidence checks run in two layers:** the schema (`minItems: 1`), and then the verifier or registry. Mutation tests call the verifier and registry directly, so a mutant in an inner layer is not masked by the schema.
+  - **The transition handler checks legality before evidence**, so an illegal edge reports `illegal_transition` instead of an evidence error.
+  - **Quotes must contain the attribute and value as whole tokens.** Tier 1 (model) claims are therefore limited to literal text in the record. Paraphrased model claims are refused, which is deliberate: no claim exceeds its evidence.
+  - **Redirects:** a redirect stores the record under the final URL. The source registered for the requested URL therefore cannot reach `evaluating` (`evidence_origin_mismatch`) and stays `candidate`. Content claims are never attributed across URLs.
+  - **Duplicate content:** memory dedup means a second URL serving identical content gets the first URL's record (origin mismatch), so it also stays `candidate`.
+- **selected:** as above.
+- **rejected:** a model-paraphrase path (no verifiable binding to the evidence).
+- **tradeoffs:**
+  - A redirect-only source can never be evaluated. An operator must register the final URL.
+  - Research writes take 3 capabilities plus `cap.memory.get`, i.e. more ControlPlane round trips (B-0013).
+- **reversal criteria:** a legitimate research workflow is blocked by the redirect or dedup rule (then add an explicit, audited alias transition).

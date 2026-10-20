@@ -153,3 +153,18 @@
 - **rejected:** gating.
 - **tradeoffs:** single run; runner noise; 200-record store only.
 - **reversal criteria:** as B-0011.
+
+## B-0013: Research pass and report cost
+- **decision_id:** B-0013
+- **date:** 2026-10-20
+- **problem:** Measure one research discovery pass through the control plane.
+- **options:** n/a (measurement).
+- **evidence:** local box, `python3 bench/bench_research.py 50`:
+  - `BENCH research_pass n=50 p50_ms=58.979 p95_ms=63.684 sources_per_pass=1`
+  - `BENCH research_report n=50 p50_ms=2.257 final_claims=50`
+
+  A single-source pass is register, fetch (sandboxed worker via the egress proxy), ingest, get, claim and 2 transitions. It is dominated by the fetch (B-0009 `browser_fetch` p50 ≈ 58-61 ms).
+- **selected:** informational. CI runs the same bench.
+- **rejected:** gating.
+- **tradeoffs:** report cost grows with claims × peers (contradiction check is O(n²) per subject/attribute); untested beyond 50 claims (UNKNOWN).
+- **reversal criteria:** report p50 > 1 s at 1k claims.

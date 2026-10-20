@@ -94,7 +94,7 @@
     },
     {
       "id": "cap.memory.knowledge",
-      "description": "Provenance-tagged, HMAC-chained, budgeted, redacting memory behind the control plane; contents are untrusted data (cycle-006)",
+      "description": "Provenance-tagged, HMAC-chained, budgeted, redacting memory behind the control plane; contents are untrusted data (cycle-006); cap.memory.get by id (cycle-007)",
       "implementations": [
         "src/memory/store.py",
         "src/memory/handlers.py",
@@ -104,8 +104,15 @@
     },
     {
       "id": "cap.research.evidence",
-      "description": "Research + evidence engine (Cycle 6)",
-      "implementations": [],
+      "description": "Source registry (exact URL, stable id, candidate/untrusted/non-executable, evidence-gated lifecycle), claim ledger + verifier (fabricated/mutated citations refused; stale/contradicted -> UNKNOWN), deterministic cited research run with branch_closed (cycle-007)",
+      "implementations": [
+        "src/research/sources.py",
+        "src/research/ledger.py",
+        "src/research/verifier.py",
+        "src/research/extract.py",
+        "src/research/handlers.py",
+        "src/research/run.py"
+      ],
       "expected_value": 0.45
     },
     {
@@ -351,6 +358,26 @@
       "from": "cap.memory.knowledge",
       "to": "cap.computer.browser",
       "type": "ingests_from"
+    },
+    {
+      "from": "cap.research.evidence",
+      "to": "cap.memory.knowledge",
+      "type": "cites_and_verifies"
+    },
+    {
+      "from": "cap.research.evidence",
+      "to": "cap.computer.browser",
+      "type": "fetches_via"
+    },
+    {
+      "from": "cap.research.evidence",
+      "to": "cap.control.policy",
+      "type": "writes_through"
+    },
+    {
+      "from": "cap.research.evidence",
+      "to": "cap.orchestration.provider_interface",
+      "type": "tier1_mock_only"
     }
   ]
 }

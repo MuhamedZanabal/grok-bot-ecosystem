@@ -56,6 +56,23 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(again.verify_chain()[0], True)
         again.close()
 
+    def test_get_by_id_wrapped_and_tamper_checked(self):
+        import sqlite3
+        rid = write(self.h, "get me by id", "op-mem-00005").result["record_id"]
+        self.h.policy.grant("agent.alpha", "cap.memory.get")
+        out = self.h.cp.execute(self.h.req("cap.memory.get", op="op-mem-00006", args={"record_id": rid}))
+        self.assertEqual(out.status, Status.EXECUTED, out)
+        self.assertEqual(out.result["items"][0]["type"], "untrusted_data")
+        self.assertEqual(out.result["items"][0]["provenance"]["record_id"], rid)
+        db = sqlite3.connect(self.h.mem_path)
+        db.execute("UPDATE records SET content='forged' WHERE record_id=?", (rid,))
+        db.commit()
+        db.close()
+        bad = self.h.cp.execute(self.h.req("cap.memory.get", op="op-mem-00007", args={"record_id": rid}))
+        self.assertEqual((bad.status, bad.reason), (Status.FAILED, "worker:memory:content_hash_mismatch"))
+        with open(self.h.audit_path) as fh:
+            self.assertIn('"memory_tamper_detected"', fh.read())
+
     def test_chain_head_anchored_in_audit_log(self):
         write(self.h, "anchor me", "op-mem-00004")
         with open(self.h.audit_path) as fh:

@@ -118,3 +118,17 @@
 - **rejected:** none.
 - **tradeoffs:** none.
 - **reversal criteria:** none.
+
+## RM-0009: After cycle-007
+- **decision_id:** RM-0009
+- **date:** 2026-10-20
+- **problem:** Next target.
+- **options:**
+  - (a) cycle-008 workflow scheduler (RM-0004 order);
+  - (b) hardening the evidence substrate (MAC-chained claim ledger, automated memory audit-anchor cross-check, per-actor namespaces);
+  - (c) cost observability.
+- **evidence:** S-0009 gaps 1 and 6 and S-0008 gaps 2-3 are integrity gaps in the substrate that research depends on. The scheduler would multiply unattended runs over that substrate.
+- **selected:** cycle-008 = (b) first, scoped to the claim-ledger chain plus the audit-anchor cross-check; then the scheduler.
+- **rejected:** scheduler first (it would automate over an unverifiable ledger).
+- **tradeoffs:** delays workflows by a cycle.
+- **reversal criteria:** the user prioritizes workflows or revenue.

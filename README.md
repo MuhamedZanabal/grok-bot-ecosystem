@@ -114,6 +114,22 @@ deterministic `MockProvider` ships; no real model API is called.
 - `memory.ingest_fetch(cp, actor, fetch_op_id, fetch_result)` stores `cap.browser.fetch`
   results as untrusted records through the control plane.
 
+## cycle-007-research: research/evidence engine (`src/research/`)
+
+- `SourceRegistry`:
+  - Stores the URL byte-exact; `source_id = "src:" + sha256(exact URL)[:32]`, with no normalization.
+  - Every source is `candidate` with `trusted=0` and `execution_allowed=0` (SQL CHECK constraints).
+  - Lifecycle is `candidate→evaluating→accepted|rejected|deferred`, plus `deferred→evaluating`. Each step needs evidence and is audited.
+- `ClaimLedger` + `Verifier`:
+  - A claim cites `{source_id, record_id, content_sha256, quote}`.
+  - The verifier refuses claims with fabricated, mutated or evidence-free citations.
+  - On every read, a claim with stale, contradicted, tampered or rejected-source evidence becomes `UNKNOWN`.
+- `ResearchRun`:
+  - Every write goes through ControlPlane: `cap.research.source_register`, `cap.research.source_transition`, `cap.research.claim_record`, `cap.browser.fetch`, `cap.memory.write` and `cap.memory.get`.
+  - Extraction is Tier 0 deterministic first, with a Tier 1 model (MockProvider only) as data.
+  - `branch_closed` fires after 3 consecutive passes with no superior candidate on the recorded metric.
+  - `write_report` emits a byte-deterministic, cited `report.json` and `report.md`.
+
 ```bash
 python3 -m unittest discover -s tests -t . -v     # invariant + adversarial tests
 bash scripts/mutation_check.sh                     # each disabled guard must fail the suite
@@ -122,6 +138,7 @@ python3 bench/bench_orchestrator.py 100            # agent run overhead (mock pr
 python3 bench/bench_tools.py 50                    # sandboxed tool call overhead
 python3 bench/bench_browser.py 30                  # browser fetch via egress proxy (local fixture)
 python3 bench/bench_memory.py 200                  # memory write/search via the control plane
+python3 bench/bench_research.py 50                 # one research pass + report (local fixture)
 MUTANT_ONLY='sandbox' bash scripts/mutation_check.sh  # local iteration on a subset
 PYTHONPATH=src python3 -m control_plane kill engage .state/KILL --reason "operator stop"
 PYTHONPATH=src python3 -m control_plane audit-verify .state/audit.jsonl
