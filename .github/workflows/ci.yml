@@ -15,7 +15,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        include:  # D-0023: mutants are sharded across the 3 required jobs (union = all mutants)
+          - {python: "3.11", shard: "0/3"}
+          - {python: "3.12", shard: "1/3"}
+          - {python: "3.13", shard: "2/3"}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +46,7 @@ jobs:
           fi
           python -c "import sys; sys.path.insert(0, 'src'); from tools import Sandbox; print('SANDBOX', Sandbox.detect())"
       - name: Compile (syntax lint)
-        run: python -m compileall -q src tests bench
+        run: python -m compileall -q src tests bench scripts
       - name: Validate artifacts are well-formed JSON
         run: python -c "import json; [json.load(open(f)) for f in ('ecosystem_manifest.json','capability_graph.json')]"
       - name: Policy invariant, orchestration + adversarial tests
@@ -56,8 +59,11 @@ jobs:
           sleep 1
           if pgrep -fx "sleep 35(99|98|97|96)" || pgrep -f "/worker/worker.py"; then echo "leaked worker children"; exit 1; fi
           echo "no leaked worker processes"
-      - name: Mutation check (each disabled guard must fail the suite)
-        if: matrix.python == '3.13'
+      - name: Store integrity cross-check against audit anchors (clean + injected tampers, D-0022)
+        run: python scripts/crosscheck_ci.py
+      - name: Mutation check, shard ${{ matrix.shard }} (each disabled guard must fail the suite)
+        env:
+          MUTANT_SHARD: ${{ matrix.shard }}
         run: bash scripts/mutation_check.sh
       - name: Overhead benchmark (informational)
         if: matrix.python == '3.13'
@@ -68,3 +74,4 @@ jobs:
           python bench/bench_browser.py 30
           python bench/bench_memory.py 200
           python bench/bench_research.py 50
+          python bench/bench_scheduler.py 200

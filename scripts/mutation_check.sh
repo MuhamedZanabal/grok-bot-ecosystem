@@ -108,10 +108,43 @@ MUTANTS=(
   "research_closed_branch_runs|research/run.py|s/if b\[\"status\"\] != \"open\":/if False:/"
   "research_report_drops_citations|research/run.py|s/refs.append(cite_index\[key\])/pass/"
   "research_report_unknown_as_value|research/run.py|s/c\[\"value\"\] if verdict == \"verified\" else \"UNKNOWN\"/c[\"value\"]/"
+  # Cycle 8 (cycle-008-scheduler): evidence hardening
+  "integrity_missing_check_off|integrity/crosscheck.py|s/missing = sorted(s for s, mac in anchored.items() if rows.get(s) != mac)/missing = []/"
+  "integrity_unanchored_off|integrity/crosscheck.py|s/unanchored = sorted(s for s in rows if s not in anchored)/unanchored = []/"
+  "ledger_read_mac_check_off|research/ledger.py|s/if not hmac.compare_digest(self._mac(c), c\[\"mac\"\]):/if False:/"
+  "ledger_chain_check_off|research/ledger.py|s/if row\[\"seq\"\] != i or row\[\"prev_mac\"\] != prev:/if False:/"
+  "ledger_row_mac_check_off|research/ledger.py|s/if not hmac.compare_digest(self._mac(row), row\[\"mac\"\]):/if False:/"
+  "claim_anchor_off|research/handlers.py|s/c.audit.append(\"claim_recorded\", /(lambda *a, **k: None)(\"claim_recorded\", /"
+  "report_ignores_integrity|research/run.py|s/if not chain_ok:  # a tampered/if False:  # a tampered/"
+  # Cycle 8: scheduler
+  "sched_kill_ignored|scheduler/engine.py|s/        if self.kill.engaged():/        if False:/"
+  "sched_risk_ceiling_off|scheduler/engine.py|s/if registered.risk > UNATTENDED_MAX_RISK:/if False:/"
+  "sched_scheduler_cap_ok|scheduler/engine.py|s/ or cap.startswith(\"cap.scheduler.\"):/:/"
+  "sched_grant_check_off|scheduler/engine.py|s/if not self.cp.policy.evaluate(actor, cap).allowed:/if False:/"
+  "sched_step_keys_open|scheduler/engine.py|s/ <= set(st) <= {\"capability\", \"args\", \"cost\"}/ <= set(st)/"
+  "sched_opid_not_slot_bound|scheduler/engine.py|s/f\"job:{job_id}:{slot}:{i}\"/f\"job:{job_id}:{slot}:{i}:{__import__('os').urandom(4).hex()}\"/"
+  "sched_live_lease_ignored|scheduler/engine.py|s/if self.store.live(now) >= self.max_concurrent:/if False:/"
+  "sched_overlap_off|scheduler/engine.py|s/if self.store.live(now, job_id):/if False:/"
+  "sched_backwards_unaudited|scheduler/engine.py|s/if last is not None and now < last - self.tolerance:/if False:/"
+  "sched_missed_unbounded|scheduler/engine.py|s/limit = 1 if spec\[\"missed\"\] == \"skip\" else spec\[\"catch_up_max\"\]/limit = 10**6/"
+  "sched_budget_ignored|scheduler/engine.py|s/Budget(b\[\"max_steps\"\], b\[\"max_wall_s\"\], b\[\"max_cost\"\])/Budget(10**6, 1e12, 1e12)/"
+  "sched_job_mac_check_off|scheduler/store.py|s/ok = hmac.compare_digest(self.mac(job_id, body), mac)/ok = True/"
+  "sched_claim_replaces|scheduler/store.py|s/INSERT OR IGNORE INTO runs/INSERT OR REPLACE INTO runs/"
+  "sched_takeover_not_cas|scheduler/store.py|s/AND lease_until=?\", (owner, lease_until, job_id, slot, old_lease)/AND lease_until>=?\", (owner, lease_until, job_id, slot, old_lease)/"
+  "sched_live_leases_recovered|scheduler/store.py|s/ and r\[\"lease_until\"\] <= now\]/]/"
+  "schedule_dom_dow_and|scheduler/schedule.py|s/return vals\[2\] in dom or vals\[4\] in dow/return vals[2] in dom and vals[4] in dow/"
+  "schedule_interval_includes_after|scheduler/schedule.py|s/range(max(lo + 1, hi - limit + 1), hi + 1)/range(max(lo, hi - limit + 1), hi + 1)/"
 )
 fail=0; killed=0; ran=0
 ONLY="${MUTANT_ONLY:-}"  # optional regex for local iteration; CI runs all
+SHARD="${MUTANT_SHARD:-0/1}"  # "i/n": run mutants whose index % n == i (CI: one shard per Python job, D-0023)
+SI="${SHARD%/*}"; SN="${SHARD#*/}"
+if ! [[ "$SI" =~ ^[0-9]+$ && "$SN" =~ ^[1-9][0-9]*$ ]] || [ "$SI" -ge "$SN" ]; then echo "bad MUTANT_SHARD=$SHARD"; exit 2; fi
+idx=-1; expected=0
 for m in "${MUTANTS[@]}"; do
+  idx=$((idx+1))
+  if [ $((idx % SN)) -ne "$SI" ]; then continue; fi
+  expected=$((expected+1))
   IFS='|' read -r name file expr <<<"$m"
   if [ -n "$ONLY" ] && ! [[ "$name" =~ $ONLY ]]; then continue; fi
   ran=$((ran+1))
@@ -133,6 +166,6 @@ for m in "${MUTANTS[@]}"; do
   for t in 3599 3598 3597 3596; do pkill -fx "sleep $t" 2>/dev/null || true; done
   pkill -f "/worker/worker.py" 2>/dev/null || true
 done
-echo "MUTATION mutants=$ran killed=$killed${ONLY:+ (filtered: $ONLY)}"
-[ -z "$ONLY" ] && [ "$ran" -ne "${#MUTANTS[@]}" ] && fail=1
+echo "MUTATION mutants=$ran killed=$killed shard=$SHARD total_defined=${#MUTANTS[@]}${ONLY:+ (filtered: $ONLY)}"
+[ -z "$ONLY" ] && [ "$ran" -ne "$expected" ] && fail=1
 exit $fail

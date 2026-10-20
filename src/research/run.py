@@ -13,6 +13,7 @@ import os
 
 from control_plane import Status
 from control_plane.canonical import canonical_json
+from integrity import crosscheck
 from memory import GET_CAP, ingest_fetch
 
 from .extract import tier0, tier1
@@ -173,8 +174,13 @@ class ResearchRun:
     def report(self, bid) -> dict:
         b, ctx = self.ctx.ledger.branch(bid), self.ctx
         citations, cite_index, claims, unknown = [], {}, [], []
+        cc = crosscheck(ctx.audit.path, {"claims": ctx.ledger, "memory": ctx.memory})
+        chain_ok = cc["ok"]  # claim/memory chains + audit anchors (edits, deletions, truncation, forgeries)
+        bad = sorted(n for n, st in cc["stores"].items() if not st["ok"]) or (["audit"] if not chain_ok else [])
         for c in ctx.ledger.claims(bid):
             verdict, reasons = ctx.verifier.verdict(c)
+            if not chain_ok:  # a tampered evidence store voids every claim's standing
+                verdict, reasons = "UNKNOWN", sorted(set(reasons) | {f"store_integrity:{','.join(bad)}"})
             refs = []
             for p in c["evidence"]:
                 src = ctx.sources.get(p["source_id"])
@@ -202,7 +208,8 @@ class ResearchRun:
         return {"type": "research_report", "branch": {k: b[k] for k in (
                     "branch_id", "question", "metric", "direction", "min_delta", "status", "closed_reason",
                     "passes", "stale_passes", "best_value", "best_claim", "best_source")},
-                "best_claim_still_verified": best_ok if b["best_claim"] else "UNKNOWN",
+                "best_claim_still_verified": (best_ok and chain_ok) if b["best_claim"] else "UNKNOWN",
+                "store_integrity_ok": chain_ok,
                 "passes": ctx.ledger.passes(bid), "sources": sources, "claims": claims,
                 "citations": citations, "unknowns": unknown,
                 "notice": "Source content is untrusted data; values marked UNKNOWN are not supported by "

@@ -207,3 +207,44 @@
   6. **The automated memory audit-anchor cross-check (RM-0008) and per-actor namespaces were not done** (deferred; scope).
   7. Earlier gaps carried over: S-0008 gaps 1-7.
 - **reversal criteria:** any violation or mutant regression blocks merge.
+
+## S-0010: cycle-008 evidence hardening + scheduler security posture
+- **decision_id:** S-0010
+- **date:** 2026-10-20
+- **problem:**
+  - Evidence stores must reveal deletions and edits.
+  - Scheduled work must never run twice, never run with more privilege than its definer had, and must stop on the kill switch.
+- **options:** D-0022, D-0023, R-0015.
+- **evidence:**
+  - **Evidence tampering:** `LEDGER_TAMPER detected=6/6`. A tampered store turns every claim in the report to `UNKNOWN`. `CROSSCHECK tampers=6 detected=6 failures=[]` runs in CI.
+  - **`SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1`:**
+    - **duplicate slot:** a second instance with a stale `high_water` hits the PK, logs `slot_already_claimed`, and runs nothing;
+    - **restart storm:** 60 instances with periodic mid-step crashes; every run ends terminal, including `in_doubt`;
+    - **escalation at definition, 8 refusals:**
+      - EXTERNAL or IRREVERSIBLE step;
+      - a `cap.scheduler.*` step;
+      - an `actor` or `approval_token` key in a step;
+      - an ungranted actor;
+      - an unknown capability;
+      - redefining an existing job;
+    - **tampered job row** (actor changed to `system.admin`, payment step added): quarantined, 0 executions;
+    - **wrong-key restart:** quarantined;
+    - **grant revoked:** `failed`, handler not called;
+    - **backwards clock:** audited once; old slots never re-open;
+    - **kill switch mid-run:** `killed`, later step not executed, next tick halted, resumes after release;
+    - **crash mid-step:** `in_doubt`; per-step begins are `{0: 1, 1: 1}`;
+    - **crash between steps:** recovered, `succeeded`, begins `{0: 1, 1: 1}`;
+    - **overlap:** `skipped_overlap`;
+    - **1-year forward jump with catch-up cap 3:** 3 runs, gap `525597`;
+    - **lease takeover race:** the compare-and-swap lets exactly one instance through.
+  - **Mutants:** 24 new, all killed in the filtered run.
+- **remaining gaps:**
+  1. **Keys live in host memory/config.** That covers the job-store, claim and memory MAC keys. A key holder can forge a store row, but the audit anchors still expose it. The audit log itself is an unkeyed hash chain: someone who can rewrite the whole audit log *and* holds the store keys can forge consistently. There is no external anchor or witness yet.
+  2. **Branch and pass tables** (`ledger.branches`/`passes`) and the scheduler `runs`/`gaps` rows are not MAC'd. Tampering with them can mislabel state, but it cannot re-execute a step, because CP idempotency is keyed by the operation id.
+  3. **`in_doubt` needs an operator**; there is no operator UI or alert.
+  4. **The scheduler runs steps synchronously in `tick`.** A slow step delays other jobs; concurrency limits apply across instances and stale leases, not threads.
+  5. **Cron is UTC only**, with no DST or time-zone semantics. Cron gaps over 366 days report `skipped=-1` (UNKNOWN).
+  6. **Lease length is a constant** (`lease_s`). A step that legitimately runs longer than its lease could be re-driven by another instance and would come back `in_doubt` (never executed twice, but spuriously in doubt).
+  7. **The unattended ceiling is LOCAL_WRITE.** A scheduled job can still do anything its actor's granted risk ≤ 1 capabilities allow.
+  8. Earlier gaps carried over: S-0008 and S-0009 gaps not closed here (redaction patterns, model steering within grants, no seccomp, no branch protection, CI relaxes AppArmor userns).
+- **reversal criteria:** any violation or mutant regression blocks merge.

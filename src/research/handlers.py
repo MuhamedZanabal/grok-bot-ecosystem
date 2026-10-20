@@ -120,11 +120,14 @@ class ClaimHandler(_Host):
             c.audit.append("claim_refused", branch_id=args["branch_id"], attribute=args["attribute"],
                            origin=args["origin"], reason=refused)
             raise HandlerFailure(f"research:{refused}")
-        cid, created = c.ledger.add(args["branch_id"], args["subject"], args["attribute"], args["value"],
-                                    args["origin"], args["evidence"], c.clock())
+        added = c.ledger.add(args["branch_id"], args["subject"], args["attribute"], args["value"],
+                             args["origin"], args["evidence"], c.clock())
+        cid = added["claim_id"]
         verdict, reasons = c.verifier.verdict(c.ledger.get(cid))
-        c.audit.append("claim_recorded", claim_id=cid, created=created, origin=args["origin"], verdict=verdict,
-                       sources=sorted({p["source_id"] for p in args["evidence"]}))
+        # anchor (seq, mac) of each NEW claim in the hash-chained audit log (cycle-008 cross-check)
+        c.audit.append("claim_recorded", claim_id=cid, created=added["created"], origin=args["origin"],
+                       verdict=verdict, sources=sorted({p["source_id"] for p in args["evidence"]}),
+                       seq=added["seq"] if added["created"] else None, mac=added["mac"] if added["created"] else None)
         return {"claim_id": cid, "verdict": verdict, "reasons": reasons}
 
 
