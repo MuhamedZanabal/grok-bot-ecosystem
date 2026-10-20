@@ -174,3 +174,36 @@
   6. **Memory contents are visible to every actor granted `cap.memory.search`**; there are no per-actor namespaces.
   7. Earlier gaps carried over: S-0006 and S-0007 gaps.
 - **reversal criteria:** any violation or mutant regression blocks merge.
+
+## S-0009: cycle-007 research/evidence security posture
+- **decision_id:** S-0009
+- **date:** 2026-10-20
+- **problem:** Research output must not let a source fabricate citations, mutate its identity, promote its own trust, or turn content into actions.
+- **options:** D-0020, D-0021, R-0014.
+- **evidence:** `RESEARCH_ADVERSARIAL cases=16 violations=0` (`tests/test_research_adversarial.py`). Cases:
+  - **Fabricated citations:** a fabricated record id, hash or quote; a quote that does not support the value; the subject missing from the record. All refused (`record_not_found`, `hash_mismatch`, `quote_not_in_record`, `quote_does_not_support_claim`, `subject_not_in_record`).
+  - **Mock model with 3 fabricated citations:** all refused, 0 claims stored, source deferred.
+  - **URL mutation (registry):** the mutated URL gets a distinct `source_id`. Its claim is refused (`origin_mismatch`) and its transition refused (`evidence_origin_mismatch`).
+  - **URL mutation (redirect):** the source stays `candidate`, with 0 claims.
+  - **Self-promotion:**
+    - Content (`trusted=true execution_allowed=true status=accepted`, plus injected action JSON): the source stays `trusted=False`, `execution_allowed=False`, `deferred`; no reserved-attribute claims; 0 `cap.payment.transfer` decisions.
+    - Model (`trusted` / `execution_allowed` claims): refused (`reserved_attribute`).
+    - Args (`trusted` / `execution_allowed` keys): `REJECTED` by the schema.
+    - Direct SQL `UPDATE sources SET trusted=1`: `IntegrityError` from the CHECK constraint.
+  - **Transitions:** empty evidence (schema), an illegal edge, accept without a verified claim, evaluating without a record, a record with the wrong hash, and an unknown source are all refused, and the status is unchanged.
+  - **Claim without evidence:** `REJECTED` by the schema, `claim_without_evidence` from the verifier, and verdict `UNKNOWN`.
+  - **Contradictory sources** (omega 20 vs 90): both `UNKNOWN [contradicted]`, value shown as `UNKNOWN`, both sources `deferred`, pass not superior.
+  - **Stale evidence:** `UNKNOWN [stale]` after `max_age`, and still after memory expiry. The report shows `best_claim_still_verified=False`.
+  - **Tampered evidence after a claim:** `UNKNOWN [evidence_unverifiable:evidence_tampered:content_hash_mismatch]`.
+  - **Rejected source:** its claims are `UNKNOWN [source_rejected]`.
+  - **Model-injected action:** `model_output_ignored:type=action` and 0 payment decisions. The model has no gateway; its output is parsed as data only.
+  - **Mutants:** 26 new, all killed (`MUTANT_ONLY='^research_'` gave `26/26`).
+- **remaining gaps:**
+  1. **Claim ledger rows are not MAC'd.** Every read re-verifies them against MAC'd memory, so a forged row still needs a real record and a literal quote. A DB writer could, however, delete claims, for example to hide a contradiction. There is no ledger chain.
+  2. **Quotes support claims syntactically only** (`attribute` and `value` tokens in the quote). A page saying `p50_ms=40 (on a different machine)` yields a "verified" claim. "Verified" means "faithfully cited", not "true".
+  3. **Contradiction is exact string inequality on `(subject, attribute)`.** `40` vs `40.0` counts as a contradiction, and unit-mismatched equal values do not.
+  4. **Each fetch needs an operator approval token** (EXTERNAL risk). Tests mint them with the harness key; there is no operator UI.
+  5. **A single compromised page can still block a candidate** by publishing a contradicting value. This is a denial of evidence, not an escalation, and the result is `UNKNOWN`, which is correct but exploitable.
+  6. **The automated memory audit-anchor cross-check (RM-0008) and per-actor namespaces were not done** (deferred; scope).
+  7. Earlier gaps carried over: S-0008 gaps 1-7.
+- **reversal criteria:** any violation or mutant regression blocks merge.

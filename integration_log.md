@@ -305,3 +305,65 @@
 - **rejected:** merging in-cycle.
 - **tradeoffs:** S-0008 gaps stand. The runner kernel version is still UNKNOWN.
 - **reversal criteria:** any later red run on this branch.
+
+## I-0019: PR #6 merged
+- **decision_id:** I-0019
+- **date:** 2026-10-20
+- **problem:** Merge cycle-006 after a green CI.
+- **options:** n/a.
+- **evidence:**
+  - `gh pr checks 6` gave `test (3.11) pass`, `test (3.12) pass`, `test (3.13) pass` (run 39344323494 on head `a0c6277`).
+  - `gh pr merge 6 --merge --match-head-commit a0c6277d1ffcd8f7af4e79c2718e14cfe93b9cbb`.
+  - `gh pr view 6` gave `MERGED`, `mergeCommit d7b405b506588fc95c641b364c41a338cf25304b`, `mergedAt 2026-10-20T00:06:43Z` (03:06 UTC+3).
+- **selected:** main = `d7b405b`, the baseline for cycle-007.
+- **rejected:** n/a.
+- **tradeoffs:** no branch protection (S-0004).
+- **reversal criteria:** n/a.
+
+## I-0020: cycle-007-research integrated on branch `cycle-7/research`
+- **decision_id:** I-0020
+- **date:** 2026-10-20
+- **problem:** Integrate D-0020 scope.
+- **options:** D-0020, D-0021, R-0014.
+- **evidence:**
+  - **New code:** `src/research/{sources,ledger,verifier,extract,handlers,run,__init__}.py` (785 physical lines including docstrings), plus `cap.memory.get` in `src/memory` (+28 lines). That is about 813 lines, **over the ~700 soft budget in D-0020 by about 16%** (recorded, not hidden). Stdlib only.
+  - **Tests:** `python3 -m unittest discover -s tests -t .` gave `Ran 174 tests ... OK` on 3.13.5, uv 3.11 and uv 3.12, with no skips.
+  - **Research output:**
+    - `RESEARCH_ADVERSARIAL cases=16 violations=0`
+    - `BRANCH_CLOSED passes=5 stale=3 metric=p50_ms best=30.0 reason=no_superior_candidate_in_3_consecutive_passes refused_pass_fetches=0`
+    - `RESEARCH_REPORT ... claims=15 unknown=4 citations=15 identical_runs=2`
+  - **Determinism scope:** the report sha is identical across two fresh harnesses on the same fixture. It differs between processes because the fixture's ephemeral port is part of each source URL, i.e. an input.
+  - **Prior sets:** 20/0, 18/0, 20/0, 21/0, 26/0 and memory 15/0 are unchanged; `POISONED_MEMORY ... dangerous_executions=0`.
+  - **Mutation:** `bash scripts/mutation_check.sh` gave `MUTATION mutants=94 killed=94`, `exit=0`, `real 18m45.869s`. Before the full run, every new mutant was compile-checked and its diff applied. One expression (`research_skip_quote_check`) initially also deleted the `:` and produced a syntax-error "kill"; it was fixed and re-killed on a real test failure.
+  - **Cleanup:** `pgrep -fa "worker.py|sleep 35|mutation_check"` gave none.
+- **selected:** integrate.
+- **rejected:** n/a.
+- **tradeoffs:** S-0009.
+- **reversal criteria:** any CI failure or violation.
+
+## I-0021: cycle-007 CI result on PR #7
+- **decision_id:** I-0021
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-007 (D-0020 required this).
+- **options:** n/a.
+- **evidence:** run 39349488423 on headSha `dd2b259528181f128d449be0c738b81f11add86e`, conclusion `success`, from 2026-10-20 03:45 to 04:06 UTC+3. Jobs `test (3.11)`, `test (3.12)` and `test (3.13)` all passed. `gh run view --job <id> --log` gave the following.
+  - **All three Pythons (3.11.17, 3.12.15, 3.13.16):**
+    - `Ran 174 tests ... OK`
+    - `RESEARCH_ADVERSARIAL cases=16 violations=0`
+    - `BRANCH_CLOSED passes=5 stale=3 metric=p50_ms best=30.0 reason=no_superior_candidate_in_3_consecutive_passes refused_pass_fetches=0`
+    - `RESEARCH_REPORT ... claims=15 unknown=4 citations=15 identical_runs=2`
+    - `MEMORY_SEARCH_MODE=fts5`
+    - `POISONED_MEMORY ... dangerous_executions=0`
+    - Prior sets unchanged: ADVERSARIAL 20/0, ORCH 18/0, TOOL 20/0, SANDBOX 21/0, EGRESS 26/0 (22 of 22 audited), MEMORY 15/0
+    - `FORK_BOMB ... left=0`
+    - `no leaked worker processes`
+  - **Python 3.13 only:**
+    - `MUTATION mutants=94 killed=94`
+    - `BENCH research_pass n=50 p50_ms=77.247 p95_ms=80.195`
+    - `BENCH research_report n=50 p50_ms=4.631`
+    - `BENCH browser_fetch p50_ms=57.737`
+    - `BENCH execute p50_ms=1.600`
+- **selected:** cycle-007 metric met in CI. PR #7 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0009 gaps stand.
+- **reversal criteria:** any later red run on this branch.

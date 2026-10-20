@@ -67,3 +67,4 @@ jobs:
           python bench/bench_tools.py 50
           python bench/bench_browser.py 30
           python bench/bench_memory.py 200
+          python bench/bench_research.py 50

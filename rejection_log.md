@@ -153,3 +153,18 @@
 - **rejected:** the above.
 - **tradeoffs:** lexical (FTS5/BM25) recall only.
 - **reversal criteria:** a research cycle shows lexical recall is insufficient (measured) → evaluate an embedding index as a deferred, audited dependency.
+
+## R-0014: Research-engine designs not chosen (cycle-007)
+- **decision_id:** R-0014
+- **date:** 2026-10-20
+- **problem:** Alternatives in D-0020 and D-0021.
+- **options / evidence:**
+  - **URL normalization for source ids:** it would merge `…/alpha`, `…/alpha/` and `…/Alpha` (the `research_url_normalised` mutant shows the tests detect this) and hide URL mutation.
+  - **Claims citing URLs only:** fabricated citations would be undetectable. The `fabricated_*` cases need `record_id`, the hash and the quote.
+  - **Model-first extraction:** non-deterministic, and it makes the model the source of truth. Tier 1 runs only when Tier 0 finds no metric, and the verifier still applies.
+  - **Letting `accepted` imply trust or executability:** it conflicts with Source Handling. The `CHECK (trusted = 0)` and `CHECK (execution_allowed = 0)` constraints make it impossible even with direct SQL.
+  - **Third-party research or RAG frameworks:** they would violate the stdlib-only rule, and no measured need exists.
+- **selected:** D-0020 and D-0021.
+- **rejected:** the above.
+- **tradeoffs:** a lexical, regex Tier 0 handles only `attribute=value` text.
+- **reversal criteria:** a measured research task where Tier 0 + Tier 1 literal quoting recovers too few claims.
