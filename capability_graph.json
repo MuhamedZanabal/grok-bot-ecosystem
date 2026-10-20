@@ -285,10 +285,11 @@
   },
   {
    "id": "cap.outreach.send",
-   "description": "Risk-3 send of one approved draft; token bound to draft hash/recipient/channel/mode; caps, suppression, idempotency; DenyTransport + dry-run default, mock only (cycle-010)",
+   "description": "Risk-3 send of one approved draft; token bound to draft hash/recipient/channel/mode(/grant_ref); caps, suppression, idempotency; DenyTransport + dry-run default; cycle-011 mode=handoff reserves for external Gmail delivery",
    "implementations": [
     "src/outreach/handlers.py",
-    "src/outreach/store.py"
+    "src/outreach/store.py",
+    "src/outreach/handoff.py"
    ],
    "expected_value": 0.6
   },
@@ -300,6 +301,23 @@
     "src/outreach/store.py"
    ],
    "expected_value": 0.4
+  },
+  {
+   "id": "cap.outreach.confirm",
+   "description": "Record the external result (sent with Gmail message id / failed) of a handoff reservation; at most one send row per reservation; anomalies flagged (cycle-011)",
+   "implementations": [
+    "src/outreach/handlers.py",
+    "src/outreach/handoff.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.outreach.approval_issuer",
+   "description": "Standing-permission grants (MAC'd with the approval key outside the state dir) minting per-draft handoff tokens, audited with the grant ref (cycle-011)",
+   "implementations": [
+    "src/outreach/issuer.py"
+   ],
+   "expected_value": 0.5
   }
  ],
  "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -533,6 +551,26 @@
    "from": "cap.workflow.scheduler",
    "to": "cap.outreach.send",
    "type": "refused_unattended"
+  },
+  {
+   "from": "cap.outreach.approval_issuer",
+   "to": "cap.control.approvals",
+   "type": "mints_tokens_via"
+  },
+  {
+   "from": "cap.outreach.send",
+   "to": "cap.outreach.approval_issuer",
+   "type": "handoff_tokens_from"
+  },
+  {
+   "from": "cap.outreach.confirm",
+   "to": "cap.outreach.send",
+   "type": "confirms_reservations_of"
+  },
+  {
+   "from": "cap.outreach.tracker",
+   "to": "cap.outreach.confirm",
+   "type": "opt_out_cancels_reservations_before"
   }
  ]
 }

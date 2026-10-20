@@ -23,7 +23,8 @@ class OutreachHarness:
             self.ctx = OutreachContext(store=self.store, audit=self.h.audit, transport=self.transport,
                                        dry_run=not live, caps=caps, clock=self.h.wall)
         register_outreach(self.h.cp, self.ctx)
-        for cap in ("cap.outreach.enqueue", "cap.outreach.send", "cap.outreach.outcome"):
+        for cap in ("cap.outreach.enqueue", "cap.outreach.send", "cap.outreach.outcome", "cap.outreach.confirm",
+                    "cap.outreach.reply"):
             self.h.policy.grant(ACTOR, cap)
 
     def build(self, **kw):

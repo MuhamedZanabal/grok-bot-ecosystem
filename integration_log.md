@@ -473,3 +473,26 @@
   - S-0012 gaps stand.
   - The slowest job (19m03s) is the longest yet. With more mutants, a 4th shard may be needed (the trigger is UNKNOWN; propose above 25 min).
 - **reversal criteria:** any later red run on this branch.
+
+## I-0027: cycle-011 CI result on PR #11
+- **decision_id:** I-0027
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-011 (D-0028 required this).
+- **options:** n/a.
+- **evidence:** run 39420644481 on headSha `dbec2be3fe1ed853983e845f42141de7a10ad59f`, conclusion `success`, from 2026-10-20 15:13 to 15:37 UTC+3. Jobs, all `success`: `test (3.11, 0/3)` 21m24s, `test (3.12, 1/3)` 23m39s, `test (3.13, 2/3)` 23m00s. `gh run view --log` gave the following.
+  - **All three jobs:**
+    - `Ran 224 tests ... OK`
+    - `HANDOFF_ADVERSARIAL cases=9 violations=0`
+    - `HANDOFF_CLI reserved=4 verified_ok=4 recorded_sent=1 opt_out=1 transport_calls=0` (synthetic fixtures)
+    - `OUTREACH_ADVERSARIAL cases=15 violations=0`, `OUTREACH_CLI pending=8 exported_jsonl=8 sends=0`
+    - `ECON_ADVERSARIAL cases=16 violations=0`, `STATUS_CI ok=True`, `CROSSCHECK tampers=6 detected=6 failures=[]`, `SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1`
+    - `no leaked worker processes`
+  - **Mutation shards:** `MUTATION mutants=66 killed=66 shard=0/3`, `66/66 shard=1/3`, `65/65 shard=2/3`, each `total_defined=197`, i.e. 197/197 (26 new `hof_*`).
+  - **3.13 bench:** `BENCH econ_execute n=300 ... overhead_p50_ms=3.640` (cycle-010: 2.261; the economics path is unchanged this cycle, so this is treated as runner variance; still under the B-0017 5 ms bound).
+  - **Real data:** no send-plan was run on the real state; 9 drafts remain `pending_approval`, 0 sends (rehearsal on a deleted copy: 4 reservable today, D-0029).
+- **selected:** cycle-011 metric met in CI. PR #11 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:**
+  - S-0013 gaps stand.
+  - The slowest job is now 23m39s, near the proposed 25-minute trigger for a 4th mutation shard (I-0026).
+- **reversal criteria:** any later red run on this branch.

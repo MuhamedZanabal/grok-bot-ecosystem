@@ -829,3 +829,61 @@
   - Most real leads (68/94) have no public email and get no draft. WhatsApp and walk-in channels are not modelled.
   - Name-key dedupe can merge two different businesses that share a name.
 - **reversal criteria:** any invented fact, or any send path without a token.
+
+## D-0028: cycle-011 definition (Gmail two-phase handoff transport), recorded before work
+- **decision_id:** D-0028
+- **date:** 2026-10-20
+- **problem:**
+  - PR #10 merged (`a887a7bc0a6cec0b40cda470d69328c45e2fe476`). The user chose to connect the outreach pipeline to their Gmail (zanabalmuhamed@gmail.com) and send the 9 pending ZAIPOS drafts through the caps.
+  - The repo's Python code cannot call the Gmail connector (the connector lives in the agent runtime, not in this process), so a direct `transport.send` is impossible.
+  - The user granted standing permission on 2026-10-20 to send ZAIPOS drafts once the pipeline is merged. S-0012 gap 1: the approval key sits in the shared state folder.
+- **options:**
+  - (h1) Give Python a Gmail credential and an HTTP client. (h2) A two-phase handoff: Python *reserves* sends through `cap.outreach.send` and emits a manifest; the external sender (the agent with the Gmail connector) sends exactly the manifest entries, then Python *records* the result through a governed confirm capability.
+  - Approval: (p1) one human-typed token per draft; (p2) a standing-permission grant recorded in the outbox and audit log, from which an issuer mints one token per draft bound to draft hash, recipient, channel, mode and grant reference.
+- **selected:** h2, p2.
+  - `python -m outreach send-plan`: for each `pending_approval` draft, the issuer mints a token and calls `cap.outreach.send` with `mode=handoff`. The handler re-checks MAC, hash, opt-out line, suppression and caps (4/day, 1/recipient/day, 2/recipient total; reservations count) inside one transaction, and inserts a reservation instead of calling a transport. Output: a manifest (reservation id, recipient, subject, body file, body sha256, expiry) plus read-only body files.
+  - `record-sent --reservation R --message-id M` / `record-failed`: through `cap.outreach.confirm` (LOCAL_WRITE). Confirming twice is an idempotent replay or a conflict, never a second send row. An unknown reservation is refused.
+  - Reservations not confirmed before expiry become `in_doubt`. They keep counting against caps and are never re-planned.
+  - `record-reply`: through `cap.outreach.reply`. Opt-out keywords (stop, unsubscribe, not interested, remove me, opt out) suppress the sender and set the outcome; open reservations to that recipient are cancelled.
+  - Every body must contain the opt-out line; enqueue and send refuse otherwise.
+  - The approval key moves out of the state dir (explicit path, env var, or `~/.config/grok-bot/`); a key inside the state dir or readable by group/other is refused.
+- **cycle definition:**
+  - cycle_id: `cycle-011-gmail-transport`
+  - objective: a governed two-phase handoff transport so the user can send approved ZAIPOS drafts via Gmail within caps, with every send planned, token-bound and recorded.
+  - capability areas: `cap.outreach.send` (risk 3, new mode `handoff`), `cap.outreach.confirm` (new), `cap.outreach.reply` (new), standing approval issuer.
+  - budgets: 1 agent session; tokens UNKNOWN; branch `cycle-011-gmail-transport`, one PR; **production code ≤ 600 new lines**; stdlib only; no network; **0 real sends; no Gmail send tool called**.
+  - success metric (locally and in CI):
+    1. 100% of tests pass on 3.11, 3.12 and 3.13.
+    2. A handoff adversarial set (≥ 8 cases) gives 0 violations: confirming a reservation that is not in the manifest / unknown; confirming the same reservation twice; cap evasion (re-plan, variants, failed-then-replan, in-doubt); suppressed recipient after opt-out; body edited after planning (file and DB); token without a recorded grant or for a revoked/exhausted grant; key custody (key inside state dir or world-readable refused).
+    3. The cycle-010 outreach adversarial set stays 15/0; prior sets, cross-check and status CI unchanged.
+    4. Every new mutant is killed in the sharded mutation check.
+    5. A synthetic end-to-end CLI run (grant → send-plan → verify-manifest → record-sent/failed → record-reply) is in CI.
+  - expected_value: high (unblocks the user's approved sends).
+  - estimated_cost: ESTIMATE one agent session; dollar cost UNKNOWN.
+  - expected_revenue: UNKNOWN.
+  - risk: medium-high (real outbound email after merge); mitigated by token binding, caps, manifest verification and the human/agent doing the actual send.
+  - confidence: medium.
+  - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
+- **rejected:** h1 (puts a mail credential in the repo runtime and gives Python a send path the user did not ask for); p1 (the user granted standing permission; per-draft binding is kept by minting per-draft tokens).
+- **reversal criteria:** any send recorded without a reservation, any reservation beyond caps, any re-plan of an in-doubt or sent draft, or any send to a suppressed recipient that the tools did not flag.
+
+## D-0029: cycle-011 implementation choices and deviations from D-0028
+- **decision_id:** D-0029
+- **date:** 2026-10-20
+- **problem:** Concrete choices made while implementing D-0028.
+- **selected:**
+  - **New modules:** `src/outreach/issuer.py` (standing grants and per-draft token minting) and `src/outreach/handoff.py` (send-plan, verify-manifest, record, record-reply, status). Extended: `handlers.py` (mode `handoff`, `HandoffTransport`, `cap.outreach.confirm`, `cap.outreach.reply`, `classify_reply`), `store.py` (`reservations`, `grants`, cap counting, sweep, cancel-on-suppress), `pipeline.py` (key custody and CLI), `drafts.py` (`OPT_OUT_LINE` constant; body bytes unchanged).
+  - **Reservation:** inside the same `BEGIN IMMEDIATE` transaction as the cap check. `reservations.draft_id` is UNIQUE, so a draft is planned at most once ever. The id is `rsv:` + 96 random bits, so a reservation from another outbox (or a guessed one) is unknown here. TTL 12 h, then `in_doubt`.
+  - **Caps** count `sends` plus reservations in `reserved` or `in_doubt`. `failed` and `cancelled` reservations release the cap, but their drafts are terminal (never re-planned).
+  - **Operation id** `outreach:handoff:<draft>:<UTC day number>`: a cap refusal today replays today and is retried tomorrow under a new id.
+  - **Manifest** lists every open (`reserved`) reservation, so re-running `send-plan` never drops an unsent entry. Fields: `reservation_id, recipient, subject, body_file, channel, draft_id, draft_hash, body_sha256, expires_at`. Body files are 0400, the manifest 0600.
+  - **verify-manifest** statuses: `ok`, `not_reserved`, `state_<state>`, `expired`, `draft_changed`, `suppressed`, `manifest_edited`, `body_file_changed` (comma-joined). Exit 0 only if every entry is ok.
+  - **Confirmation** uses operation id `confirm:<rid>`: the same result again is `replayed`; a different message id or result is a `conflict`; a fresh op id is refused by the handler (`already_sent|failed`). A message id cannot back two reservations. A send that did happen is recorded even when anomalous (`late_in_doubt`, `after_cancel`, `body_file_changed`, `draft_changed`), flagged in the result and audit, and the CLI exits 3.
+  - **Replies:** the text is classified only (the CP ledger stores its hash, not the text). Lines starting with `>` and everything after a quote header (`On … wrote:`, `-----Original Message-----`, `From:`) are ignored, because our own body says `reply "stop"`. Keywords: stop, unsubscribe, not interested, remove me, opt out/opt-out, do not contact/email. An opt-out suppresses the sender (even an unknown one), sets lead outcomes to `opted_out` and cancels open reservations.
+  - **Approval key:** `--approval-key`, `$OUTREACH_APPROVAL_KEY`, or `~/.config/grok-bot/outreach_approval.key` (created 0600 in a 0700 dir). Refused if it is inside the state dir or has group/other permission bits. `send-plan` reports `legacy_approval_key_in_state` when the cycle-010 key still exists (it is no longer read).
+  - **Grant rows** are MAC'd with the approval key. Tokens: TTL 600 s, approver `standing:<ref>`, `outreach_approval_issued` audited per draft. A grant covers one template and a `max_sends` ceiling (≤ 50) counted over reservations.
+- **deviations from D-0028:** none in scope. Production code: 553 new lines (budget 600).
+- **evidence:** local `Ran 224 tests OK`; `HANDOFF_ADVERSARIAL cases=9 violations=0`; `OUTREACH_ADVERSARIAL cases=15 violations=0`; `HANDOFF_CLI reserved=4 verified_ok=4 recorded_sent=1 opt_out=1 transport_calls=0`.
+  - **Rehearsal on a throw-away copy of the real state** (deleted afterwards; the real state was not opened, its mtimes still 10:39 UTC+3): `pending_approval=9` → `send-plan` `reserved=4`, `skipped={cap:day: 5}`, `verify ok 4/4`, opt-out line in 4/4 bodies, `legacy_approval_key_in_state=true`, sends 0. Counts only.
+- **tradeoffs:** a failed send is terminal for its draft (no automatic retry); a retry needs a new draft. The cap day is the UTC day (UTC+3 local: the day rolls over at 03:00 local).
+- **reversal criteria:** any metric regression, or any real send recorded without a reservation.

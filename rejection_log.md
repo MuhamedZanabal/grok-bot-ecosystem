@@ -212,3 +212,17 @@
   - An `approve` CLI (would let any process with box access mint tokens). Tokens are minted only by the approval authority holder, outside this cycle.
   - Wiring Gmail, Agentmail or WhatsApp transports (forbidden by the user this cycle).
 - **reversal criteria:** the user explicitly authorizes a real transport, with its own cycle and tests.
+
+## R-0018: Gmail handoff designs not chosen (cycle-011)
+- **decision_id:** R-0018
+- **date:** 2026-10-20
+- **problem:** Record the alternatives rejected in D-0028 and D-0029.
+- **options / rejected:**
+  - A Gmail API client in Python with an OAuth credential on the box (adds a credential and a direct send path; the user asked for a handoff).
+  - Deterministic reservation ids (a reservation from another outbox with the same data was accepted in the first test run; replaced by random ids).
+  - Operation id attempt fixed at 1 (yesterday's cap refusal replayed forever; replaced by the UTC day number).
+  - A manifest holding only newly reserved entries (a second same-day run wiped the unsent entries; replaced by every open reservation).
+  - Refusing to record an anomalous send (it already happened; refusing would hide it from caps). It is recorded and flagged instead.
+  - Releasing failed drafts back to `pending_approval` (a false `failed` report would allow a double send).
+  - Storing reply text (untrusted, may hold PII). Only the classification is kept.
+- **reversal criteria:** an out-of-box signer or a sender that reports delivery itself.
