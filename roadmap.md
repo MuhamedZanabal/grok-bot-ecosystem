@@ -192,3 +192,15 @@
   - (c) RM-0011 (a): paper-venue reconciliation.
 - **selected:** recommend (a) next. (b) only on the user's explicit instruction, in its own cycle.
 - **reversal criteria:** the user directs otherwise.
+
+## RM-0013: After cycle-011
+- **decision_id:** RM-0013
+- **date:** 2026-10-20
+- **problem:** Next steps after the Gmail handoff transport.
+- **evidence:** D-0029, S-0013. 9 real drafts pending; rehearsal shows 4 reservable today (cap 4/day), so the 9 need 3 UTC days (4 + 4 + 1).
+- **options:**
+  - (a) read-only reply ingestion from Gmail (search replies to sent message ids, then `record-reply`), so opt-outs do not depend on manual runs;
+  - (b) an out-of-box approval signer (S-0013 gap 1);
+  - (c) RM-0011 (a) paper-venue reconciliation.
+- **selected:** recommend (a), then (b). The user decides.
+- **reversal criteria:** the user directs otherwise.

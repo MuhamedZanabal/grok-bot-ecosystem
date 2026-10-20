@@ -1,9 +1,9 @@
 {
- "cycle_id": "cycle-010-outreach",
- "head_sha": "36f00e15df8eec42980d2d522039927b5e08bf23 (implementation; CI-verified run 39388161433). Log-only follow-up commit recording I-0026 is verified by its own PR run.",
+ "cycle_id": "cycle-011-gmail-transport",
+ "head_sha": "PENDING (set after the PR CI run)",
  "head_sha_note": "Updated after the PR run.",
- "baseline_sha": "07904d283096c8fea814d125fd5f5e66536a9817",
- "branch": "cycle-10/outreach",
+ "baseline_sha": "a887a7bc0a6cec0b40cda470d69328c45e2fe476",
+ "branch": "cycle-011-gmail-transport",
  "capabilities": [
   {
    "id": "cap.control.policy",
@@ -162,25 +162,35 @@
   },
   {
    "id": "cap.outreach.send",
-   "status": "integrated (mock transport only; 0 real sends)",
-   "evidence": "risk 3; OUTREACH_ADVERSARIAL cases=15 violations=0; S-0012"
+   "status": "integrated (handoff transport: reserve + manifest; delivery external via the user's Gmail after merge; 0 sends by the repo)",
+   "evidence": "risk 3; per-draft token incl. mode=handoff and grant_ref; OUTREACH_ADVERSARIAL 15/0; HANDOFF_ADVERSARIAL 9/0; S-0012, S-0013"
   },
   {
    "id": "cap.outreach.tracker",
    "status": "integrated",
-   "evidence": "outcomes UNKNOWN by default; opt-out suppression; revenue UNKNOWN; S-0012"
+   "evidence": "outcomes UNKNOWN by default; opt-out suppression; revenue UNKNOWN; S-0012; cycle-011 record-reply opt-out keywords suppress sender and cancel open reservations (S-0013)"
+  },
+  {
+   "id": "cap.outreach.confirm",
+   "status": "integrated",
+   "evidence": "src/outreach/handlers.py ConfirmHandler, handoff.py; confirm twice -> replayed/conflict/already_sent; D-0029, S-0013"
+  },
+  {
+   "id": "cap.outreach.approval_issuer",
+   "status": "integrated",
+   "evidence": "src/outreach/issuer.py; MAC'd standing grants (approval key outside the state dir), per-draft tokens audited with grant ref; grant_controls + key_custody cases; S-0013 gap 1 (same host) stands"
   }
  ],
  "verification": {
-  "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 217 tests, OK (Python 3.13.5)",
+  "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 224 tests, OK (Python 3.13.5)",
   "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
   "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
   "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
   "adversarial_sandbox": "SANDBOX_ADVERSARIAL cases=21 escapes=0",
   "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
   "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
-  "mutation": "171 defined; CI shards 57/57 x3 = 171/171 (run 39388161433)",
-  "ci": "run 39388161433 on 36f00e1: success; test (3.11, 0/3) 17m24s, (3.12, 1/3) 17m02s, (3.13, 2/3) 19m03s; 217 tests OK x3; OUTREACH_ADVERSARIAL 15/0 x3; MUTATION 57x3=171/171 (I-0026)",
+  "mutation": "197 defined (26 new hof_*); CI result PENDING",
+  "ci": "PENDING",
   "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
   "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
   "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)",
@@ -193,7 +203,10 @@
   "adversarial_economics": "ECON_ADVERSARIAL cases=16 violations=0",
   "status_report": "STATUS_REPORT attention=8 classes=[actual_usd_unknown, crosscheck_failed, day_usd_global_burn>=80%, in_doubt, kill_switch_engaged, quarantined, reservation_without_outcome, skipped_gaps]",
   "adversarial_outreach": "OUTREACH_ADVERSARIAL cases=15 violations=0",
-  "outreach_real_data": "records=130 leads=94 drafts_created=9 pending_approval=9 sends=0 (counts only; data outside git)"
+  "outreach_real_data": "records=130 leads=94 drafts_created=9 pending_approval=9 sends=0 (counts only; data outside git)",
+  "adversarial_handoff": "HANDOFF_ADVERSARIAL cases=9 violations=0",
+  "handoff_cli": "HANDOFF_CLI reserved=4 verified_ok=4 recorded_sent=1 opt_out=1 transport_calls=0 (synthetic)",
+  "handoff_real_data_rehearsal": "on a deleted copy of the real state: pending_approval=9 -> reserved=4 skipped cap:day=5, verify ok 4/4, sends=0 (counts only; real state not opened)"
  },
  "economics": {
   "expected_revenue_usd": "UNKNOWN (revops target >= BHD 12 by 2026-11-30 is a goal, not evidence)",
@@ -202,10 +215,10 @@
   "telemetry": "cycle-009 EconomicsLedger: every governed op that executes has one MAC'd, anchored row with expected_value, estimated_cost, actual_cost, expected_revenue, actual_revenue, risk, confidence, each with provenance measured|configured_estimate|unknown",
   "live_money_prerequisites": "see RM-0011: telemetry MET; spend caps MET for estimates; billed cost, balance guards, exposure/drawdown, venue allowlist, reconciliation, external witness NOT MET; emergency stop PARTIAL",
   "latency_cost": "economics ledger overhead p50 ~1.3 ms locally, ~2.2 ms on CI 3.13 runner (B-0017, I-0025)",
-  "outreach": "cycle-010: 9 real drafts pending_approval, 0 sends; revenue UNKNOWN until verified"
+  "outreach": "cycle-011: two-phase Gmail handoff; 9 real drafts pending_approval, 0 sends from the repo; at 4/day the 9 need 3 UTC days; revenue UNKNOWN until verified"
  },
- "last_updated": "2026-10-20T08:05:00Z",
- "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/10 (open, not merged)",
+ "last_updated": "2026-10-20T12:30:00Z",
+ "pull_request": "PENDING",
  "cycle_history": [
   {
    "cycle_id": "cycle-001-control-plane",
@@ -269,6 +282,13 @@
    "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/9",
    "merged_to_main": "07904d283096c8fea814d125fd5f5e66536a9817",
    "ci": "success: run 39363591310 on a14b97a and run 39364965564 on 7bff14c (207 tests OK x3; ECON_ADVERSARIAL 16/0; STATUS_CI ok; MUTATION 146/146 sharded) (I-0025)"
+  },
+  {
+   "cycle_id": "cycle-010-outreach",
+   "head_sha": "fb128cc7d9990a0d3fec47a0fe58684fef5090ae",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/10",
+   "merged_to_main": "a887a7bc0a6cec0b40cda470d69328c45e2fe476",
+   "ci": "success: run 39388161433 on 36f00e1 and run 39390391726 on fb128cc (217 tests OK x3; OUTREACH_ADVERSARIAL 15/0; MUTATION 171/171 sharded) (I-0026)"
   }
  ],
  "baseline_inspection_cycle_8": {

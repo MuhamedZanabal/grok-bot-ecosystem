@@ -16,8 +16,9 @@ OFFER = ("I'm taking on a few founding businesses. Setup is free, you run it nex
 INTRO = ("I'm Zanabal, a developer based in Bahrain. I built ZAIPOS, a point-of-sale made for Bahrain: BHD to "
          "3 decimals, 10% VAT receipts, Cash/Card/BenefitPay, table orders, and delivery-app orders tracked net "
          "of commission.")
+OPT_OUT_LINE = "If you'd rather not hear from me again, reply \"stop\" and I won't write again."   # required (cycle-011)
 ASK = ("Could I stop by for 10 minutes this week? A time that suits you, or a quick \"no thanks\", is "
-       "completely fine. If you'd rather not hear from me again, reply \"stop\" and I won't write again.")
+       "completely fine. " + OPT_OUT_LINE)
 SIGNATURE = "Zanabal Muhamed"
 
 

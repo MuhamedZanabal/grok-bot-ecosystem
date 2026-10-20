@@ -132,7 +132,7 @@ class CliTests(unittest.TestCase):
         o = OutreachHarness()
         try:
             st = os.path.join(o.h.dir.name, "state")
-            env = {**os.environ, "PYTHONPATH": SRC}
+            env = {**os.environ, "PYTHONPATH": SRC, "OUTREACH_APPROVAL_KEY": os.path.join(o.h.dir.name, "keys", "a.key")}
             run = lambda *a: subprocess.run([sys.executable, "-m", "outreach", *a], capture_output=True, text=True,
                                             env=env, timeout=60)
             p = run("build", "--state", st, "--pipeline", os.path.join(FIX, "pipeline.csv"),

@@ -311,3 +311,28 @@
   7. **`grants.sqlite`, `ops.sqlite` and `outbox.sqlite` are created 0644** inside a 0700 dir.
   8. **The real transport does not exist.** Delivery, bounces and reply ingestion are untested by design.
 - **reversal criteria:** any violation or mutant regression blocks merge.
+
+## S-0013: cycle-011 two-phase Gmail handoff: threat model, evidence, gaps
+- **decision_id:** S-0013
+- **date:** 2026-10-20
+- **problem:** Real sends will now happen (by the user, through Gmail) after merge. The Python process cannot deliver mail, so the risk moves to the handoff boundary: sending something not planned, sending twice, sending past caps, sending after an opt-out, or sending edited content.
+- **controls:** see D-0029. Every planned send passes `cap.outreach.send` (risk 3) with a per-draft token bound to draft hash, recipient, channel, `mode=handoff` and grant ref; caps and suppression are re-checked in the reservation transaction; verify-manifest re-checks each entry immediately before sending; every confirmation goes through `cap.outreach.confirm`.
+- **evidence:** `HANDOFF_ADVERSARIAL cases=9 violations=0`:
+  - **not_in_manifest:** an unknown/forged reservation, a reservation from another outbox, and a confirmation keyed by draft id are all refused; 0 send rows.
+  - **confirm_twice:** replay → `replayed`; other message id or result → `conflict`; fresh op id → `already_sent`; reused message id → `message_id_reused`; 1 send row.
+  - **cap_evasion:** same-day re-plan reserves 0 and keeps the 4 open entries; a failed draft and 3 in-doubt drafts are never re-planned; 4 recipient spellings posing as 4 leads get 1 on day 1 and 2 in total.
+  - **suppressed_after_opt_out:** a `STOP` reply from a case/+tag variant suppresses the mailbox, cancels its reservation, makes verify say `suppressed`, and sets `opted_out`; a positive reply quoting our opt-out line does not suppress; a send reported anyway is recorded with `after_cancel`; the recipient is never planned again.
+  - **body_edited_after_plan:** an edited body file → `body_file_changed`; an edited DB draft → `draft_changed`; an edited manifest recipient → `manifest_edited`; recording those sends flags the anomaly.
+  - **grant_controls:** no grant → `grant_missing`; a standing grant cannot mint a live-mode token; a live-mode token cannot authorize a handoff; revoke between issue and execute → `grant_inactive`; `max_sends=2` → 2 reserved; a DB-raised ceiling → `grant_tampered`.
+  - **key_custody:** a key inside the state dir (or below it) and a 0644 key are refused.
+  - **handoff_needs_explicit_config:** default context (DenyTransport, dry run) and a non-handoff transport reserve nothing; `HandoffTransport.send` raises.
+  - **opt_out_line_required:** a body without the opt-out line cannot be enqueued.
+  - Mutants: 26 new `hof_*`, all killed (197 defined).
+- **remaining gaps:**
+  1. **Same host, same uid.** The approval key moved out of the state folder but stays on the shared box. Any process running as `box` can read it, record a grant and plan sends. Custody is separated, not isolated. An out-of-box signer is still UNKNOWN/not built.
+  2. **The external send is not observed by this repo.** If the sender ignores verify-manifest or sends text other than the body file, the repo only learns what `record-sent` is told. Unreported sends are invisible to caps; reservations left unconfirmed become `in_doubt` and keep consuming caps (fail-safe).
+  3. **Reply ingestion is manual.** Nothing polls Gmail. Opt-outs take effect only once `record-reply` is run. Keyword matching is English-only and heuristic; false negatives are possible (e.g. Arabic replies).
+  4. **Gmail message ids** are taken on trust (format-checked only).
+  5. Cycle-010 gaps 2–7 stand (MAC key in the state dir, syntactic recipients, per-DB caps, name dedupe, `require_host_hardening=False`, 0644 SQLite files).
+  6. **Legacy key.** `/workspace/outreach_state/approval.key` (cycle-010) still exists; it is no longer read. Deleting it is recommended.
+- **reversal criteria:** any violation or mutant regression blocks merge.

@@ -866,3 +866,24 @@
   - abort rule: emit `cycle_aborted` if the metric is unmet within budget.
 - **rejected:** h1 (puts a mail credential in the repo runtime and gives Python a send path the user did not ask for); p1 (the user granted standing permission; per-draft binding is kept by minting per-draft tokens).
 - **reversal criteria:** any send recorded without a reservation, any reservation beyond caps, any re-plan of an in-doubt or sent draft, or any send to a suppressed recipient that the tools did not flag.
+
+## D-0029: cycle-011 implementation choices and deviations from D-0028
+- **decision_id:** D-0029
+- **date:** 2026-10-20
+- **problem:** Concrete choices made while implementing D-0028.
+- **selected:**
+  - **New modules:** `src/outreach/issuer.py` (standing grants and per-draft token minting) and `src/outreach/handoff.py` (send-plan, verify-manifest, record, record-reply, status). Extended: `handlers.py` (mode `handoff`, `HandoffTransport`, `cap.outreach.confirm`, `cap.outreach.reply`, `classify_reply`), `store.py` (`reservations`, `grants`, cap counting, sweep, cancel-on-suppress), `pipeline.py` (key custody and CLI), `drafts.py` (`OPT_OUT_LINE` constant; body bytes unchanged).
+  - **Reservation:** inside the same `BEGIN IMMEDIATE` transaction as the cap check. `reservations.draft_id` is UNIQUE, so a draft is planned at most once ever. The id is `rsv:` + 96 random bits, so a reservation from another outbox (or a guessed one) is unknown here. TTL 12 h, then `in_doubt`.
+  - **Caps** count `sends` plus reservations in `reserved` or `in_doubt`. `failed` and `cancelled` reservations release the cap, but their drafts are terminal (never re-planned).
+  - **Operation id** `outreach:handoff:<draft>:<UTC day number>`: a cap refusal today replays today and is retried tomorrow under a new id.
+  - **Manifest** lists every open (`reserved`) reservation, so re-running `send-plan` never drops an unsent entry. Fields: `reservation_id, recipient, subject, body_file, channel, draft_id, draft_hash, body_sha256, expires_at`. Body files are 0400, the manifest 0600.
+  - **verify-manifest** statuses: `ok`, `not_reserved`, `state_<state>`, `expired`, `draft_changed`, `suppressed`, `manifest_edited`, `body_file_changed` (comma-joined). Exit 0 only if every entry is ok.
+  - **Confirmation** uses operation id `confirm:<rid>`: the same result again is `replayed`; a different message id or result is a `conflict`; a fresh op id is refused by the handler (`already_sent|failed`). A message id cannot back two reservations. A send that did happen is recorded even when anomalous (`late_in_doubt`, `after_cancel`, `body_file_changed`, `draft_changed`), flagged in the result and audit, and the CLI exits 3.
+  - **Replies:** the text is classified only (the CP ledger stores its hash, not the text). Lines starting with `>` and everything after a quote header (`On … wrote:`, `-----Original Message-----`, `From:`) are ignored, because our own body says `reply "stop"`. Keywords: stop, unsubscribe, not interested, remove me, opt out/opt-out, do not contact/email. An opt-out suppresses the sender (even an unknown one), sets lead outcomes to `opted_out` and cancels open reservations.
+  - **Approval key:** `--approval-key`, `$OUTREACH_APPROVAL_KEY`, or `~/.config/grok-bot/outreach_approval.key` (created 0600 in a 0700 dir). Refused if it is inside the state dir or has group/other permission bits. `send-plan` reports `legacy_approval_key_in_state` when the cycle-010 key still exists (it is no longer read).
+  - **Grant rows** are MAC'd with the approval key. Tokens: TTL 600 s, approver `standing:<ref>`, `outreach_approval_issued` audited per draft. A grant covers one template and a `max_sends` ceiling (≤ 50) counted over reservations.
+- **deviations from D-0028:** none in scope. Production code: 553 new lines (budget 600).
+- **evidence:** local `Ran 224 tests OK`; `HANDOFF_ADVERSARIAL cases=9 violations=0`; `OUTREACH_ADVERSARIAL cases=15 violations=0`; `HANDOFF_CLI reserved=4 verified_ok=4 recorded_sent=1 opt_out=1 transport_calls=0`.
+  - **Rehearsal on a throw-away copy of the real state** (deleted afterwards; the real state was not opened, its mtimes still 10:39 UTC+3): `pending_approval=9` → `send-plan` `reserved=4`, `skipped={cap:day: 5}`, `verify ok 4/4`, opt-out line in 4/4 bodies, `legacy_approval_key_in_state=true`, sends 0. Counts only.
+- **tradeoffs:** a failed send is terminal for its draft (no automatic retry); a retry needs a new draft. The cap day is the UTC day (UTC+3 local: the day rolls over at 03:00 local).
+- **reversal criteria:** any metric regression, or any real send recorded without a reservation.
