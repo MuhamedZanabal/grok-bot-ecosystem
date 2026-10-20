@@ -197,3 +197,16 @@
 - **rejected:** gating.
 - **tradeoffs:** in-process handler only; a sandboxed step adds about 36 ms (B-0010). `tick` scans all jobs and runs, which is O(jobs + runs); untested beyond 2 jobs and 200 runs (UNKNOWN).
 - **reversal criteria:** idle tick p50 > 50 ms at 1k jobs.
+
+## B-0016: CI runner timings for cycle-008
+- **decision_id:** B-0016
+- **date:** 2026-10-20
+- **problem:** Record the CI-runner scheduler and research latency, and per-shard job wall time.
+- **options:** n/a (measurement).
+- **evidence:** run 39358456324:
+  - **Job wall time:** 3.11/shard 0 18m21s, 3.12/shard 1 13m37s, 3.13/shard 2 12m15s (cycle-007 single mutation job: 21m37s).
+  - **3.13 bench:** `scheduler_tick_run p50_ms=4.860 p95_ms=5.505`, `scheduler_tick_idle p50_ms=0.295`, `research_report p50_ms=12.194` (up from 4.631 in B-0014: the report now runs the audit-anchor cross-check, which reads the whole audit log), `execute p50_ms=1.191`.
+- **selected:** informational.
+- **rejected:** gating.
+- **tradeoffs:** single run; runner noise.
+- **reversal criteria:** report p50 > 1 s, or any shard job > 30 min.

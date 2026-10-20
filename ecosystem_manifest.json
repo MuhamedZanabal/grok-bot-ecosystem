@@ -1,6 +1,6 @@
 {
   "cycle_id": "cycle-008-scheduler",
-  "head_sha": "UNKNOWN until pushed and verified by CI",
+  "head_sha": "4f573704272588621998a440e443850d47207c72 (implementation; CI-verified run 39358456324). Log-only follow-up commit recording I-0024 is verified by its own PR run.",
   "head_sha_note": "Updated after the PR run.",
   "baseline_sha": "2bbfa9293887e5b3f8edf1fcabf772dd8ade4aa8",
   "branch": "cycle-8/scheduler",
@@ -145,7 +145,7 @@
     "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
     "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
     "mutation": "MUTANT_SHARD=0/3,1/3,2/3 bash scripts/mutation_check.sh -> 40/40, 39/39, 39/39 = 118/118 locally (619/618/604 s)",
-    "ci": "UNKNOWN until PR run completes",
+    "ci": "run 39358456324 on 4f57370: success; test (3.11, 0/3) 18m21s, (3.12, 1/3) 13m37s, (3.13, 2/3) 12m15s; 191 tests OK x3; SCHEDULER_ADVERSARIAL 13/0 x3; CROSSCHECK detected=6/6 x3; MUTATION 40+39+39=118/118 (I-0024)",
     "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
     "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
     "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)",
@@ -163,8 +163,8 @@
     "model_call_cost": "RunConfig.model_call_cost=0.01 budget units is a configured ESTIMATE, not a measurement",
     "latency_cost": "scheduler tick (1-step job) p50 ~2.9 ms, idle ~0.3 ms locally (B-0015)"
   },
-  "last_updated": "2026-10-20T02:40:00Z",
-  "pull_request": "UNKNOWN (opened after this commit)",
+  "last_updated": "2026-10-20T02:45:00Z",
+  "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/8 (open, not merged)",
   "cycle_history": [
     {
       "cycle_id": "cycle-001-control-plane",

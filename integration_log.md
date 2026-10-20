@@ -405,3 +405,24 @@
 - **rejected:** n/a.
 - **tradeoffs:** S-0010.
 - **reversal criteria:** any CI failure or violation.
+
+## I-0024: cycle-008 CI result on PR #8
+- **decision_id:** I-0024
+- **date:** 2026-10-20
+- **problem:** Record the real CI result for cycle-008 (D-0022 required this).
+- **options:** n/a.
+- **evidence:** run 39358456324 on headSha `4f573704272588621998a440e443850d47207c72`, conclusion `success`, from 2026-10-20 05:21 to 05:39 UTC+3. Jobs: `test (3.11, 0/3)` 18m21s, `test (3.12, 1/3)` 13m37s, `test (3.13, 2/3)` 12m15s, all `pass`. `gh run view --job <id> --log` gave the following.
+  - **All three Pythons (3.11.17, 3.12.15, 3.13.16):**
+    - `Ran 191 tests ... OK`
+    - `SCHEDULER_ADVERSARIAL cases=13 violations=0 max_begins_per_op=1`
+    - `LEDGER_TAMPER detected=6/6 via={... claim_delete_tail: anchor, claim_forged_insert_with_key: anchor, memory_truncate_tail: anchor ...}`
+    - `CROSSCHECK clean ok=True audit_records=142 memory_rows=5 claim_rows=10` and `CROSSCHECK tampers=6 detected=6 failures=[]` (CI step)
+    - Prior sets unchanged: RESEARCH 16/0, `BRANCH_CLOSED ... refused_pass_fetches=0`, MEMORY 15/0, `POISONED_MEMORY ... dangerous_executions=0`, ADVERSARIAL 20/0, ORCH 18/0, TOOL 20/0, SANDBOX 21/0, EGRESS 26/0, `FORK_BOMB ... left=0`
+    - `no leaked worker processes`
+  - **Mutation shards:** `MUTATION mutants=40 killed=40 shard=0/3`, `39/39 shard=1/3`, `39/39 shard=2/3`, i.e. 118/118.
+  - **Wall time:** the slowest job (3.11) took 18m21s, versus 21m37s for the single 3.13 mutation job in run 39351689327. D-0022 metric 6 is met.
+  - **3.13 bench:** `BENCH scheduler_tick_run n=200 p50_ms=4.860`, `scheduler_tick_idle p50_ms=0.295 max_begins=1`, `research_pass p50_ms=64.575`, `research_report p50_ms=12.194`.
+- **selected:** cycle-008 metric met in CI. PR #8 is left open (not merged, per spec).
+- **rejected:** merging in-cycle.
+- **tradeoffs:** S-0010 gaps stand. Shard 0/3 is the long pole; balancing it is UNKNOWN beyond index-mod.
+- **reversal criteria:** any later red run on this branch.
