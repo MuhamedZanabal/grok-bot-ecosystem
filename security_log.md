@@ -282,3 +282,32 @@
   7. **Revenue is unmeasurable by design** until a reconciler exists (RM-0011).
   8. S-0010 gaps 1, 2 and 4-8 carry over. Gap 3 (no operator view of `in_doubt`) is now partially closed by the status report.
 - **reversal criteria:** any violation or mutant regression blocks merge.
+
+## S-0012: cycle-010 outreach security posture
+- **decision_id:** S-0012
+- **date:** 2026-10-20
+- **problem:** No message may reach anyone without a human approval for that exact draft, recipient, channel and mode. Lead data is untrusted and must not become text we did not vet, or an action.
+- **options:** D-0026, D-0027, R-0017.
+- **evidence:** `OUTREACH_ADVERSARIAL cases=15 violations=0`:
+  - **no token** → `approval_required`.
+  - **token reuse:** a token for draft A used on B → `approval_invalid`; a token reused with another recipient → `approval_invalid`; a validly signed token for a wrong recipient → the handler refuses (`recipient_or_channel_mismatch`); a dry-run token used live → `approval_invalid`; an unknown channel → `rejected` by schema.
+  - **tamper after approval:** body edited → `draft_tampered` (MAC); a key holder re-MACs and re-hashes → `draft_hash_mismatch` (the token binds the old hash).
+  - **suppression:** a recipient suppressed under a variant spelling after approval → refused; opt-out via the tracker after approval → refused, and pending drafts become `rejected`.
+  - **cap splitting:** 8 approved drafts → 4 sent and 4 refused, then 4 the next day. 4 drafts to one mailbox under case and `+tag` variants and posing as 4 lead ids → 1 per day, 2 lifetime.
+  - **double send:** replay → `replayed`; a new attempt → `not_pending:sent`; a re-enqueue under a fresh op id does not reset `sent`; `sends` rejects a second row.
+  - **injection** (instruction text in name, bidi/zero-width chars, `<script>` in area, injected category/cuisine, a newline+Bcc in the email field): 2 leads held, 0 injected strings or invisible characters in any draft, the build invokes only `cap.outreach.enqueue`. Charset rule: 6 unsafe names held, 4 legitimate (accented, Arabic, parentheses, `#`) allowed.
+  - **revenue forged:** a revenue field is rejected by schema; `paid_unverified` leaves revenue UNKNOWN.
+  - **defaults:** DenyTransport + dry run → `forced` dry result with no state change; with dry-run off, the deny transport still refuses (`transport_disabled`).
+  - **scheduler:** an unattended send is refused (`risk_exceeds_unattended_ceiling`).
+
+  Mutants: 26 new `out_*`, all killed in filtered runs (171 defined).
+- **remaining gaps:**
+  1. **Approval key custody.** `approval.key` sits in the state dir (0600) on the shared box. Any process running as the same user can read it and mint tokens. The approval property holds only if that key is held by the human/approver path. UNKNOWN until an approver UI or out-of-box signer exists.
+  2. **The draft MAC key is in the same state dir.** A key holder can rewrite a draft, but cannot reuse an approval issued for the old hash.
+  3. **Recipient validity is syntactic only.** Mailbox existence and consent are UNKNOWN. Opt-out depends on someone recording replies through the tracker; nothing reads replies.
+  4. **Caps are per outbox DB.** Two state dirs mean two independent caps.
+  5. **Name-only dedupe** can merge or split businesses wrongly. Phone/email keys mitigate this.
+  6. **The CLI runtime starts the ControlPlane with `require_host_hardening=False`.**
+  7. **`grants.sqlite`, `ops.sqlite` and `outbox.sqlite` are created 0644** inside a 0700 dir.
+  8. **The real transport does not exist.** Delivery, bounces and reply ingestion are untested by design.
+- **reversal criteria:** any violation or mutant regression blocks merge.

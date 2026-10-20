@@ -792,3 +792,40 @@
   - a1: bypassable.
   - x1: the user forbade sending.
 - **reversal criteria:** any send without a valid token, any invented lead fact, or any cap or suppression bypass.
+
+## D-0027: cycle-010 implementation choices and real-data run
+- **decision_id:** D-0027
+- **date:** 2026-10-20
+- **problem:** Concrete choices made while implementing D-0026, and the evidence from the real-data run.
+- **selected:**
+  - **Package:** `src/outreach/` with `leads.py` (ingest, clean, dedupe, rules), `drafts.py` (templates), `store.py` (outbox, suppression, sends, outcomes), `handlers.py` (capabilities, transports, caps), `pipeline.py` (runtime, build, export, CLI).
+  - **Ingest:**
+    - Only whitelisted columns are read. Control, bidi and zero-width characters are replaced and length is capped.
+    - The recipient keeps its original spelling when valid. `norm_email` (lowercase, `+tag` stripped, trailing dot) is used only for dedupe keys, caps and suppression.
+    - Dedupe is union-find over email, phone digits (≥ 7) and normalized name. A field conflict keeps the first source and is recorded with both provenances.
+    - Pipeline `status` and `touches` always come from `pipeline.csv`.
+  - **Hold rule:** the slot fields `name` and `area` must be letters or digits (any script) plus `&'’.,-()°/#+!`, and must not match the instruction/markup/URL pattern. Otherwise the lead is held and never drafted. `category` enters text only through a fixed phrase map.
+  - **Scoring:** 7 rules (email +3, phone +1, food service +2, multi-branch +2, live website +1, social-only +1, hours +1; max 11). The source CSV's `fit_score` is ignored as untrusted. Each rule hit records field, value and provenance.
+  - **Templates:** `zaipos_email_v1` with an opt-out line ("reply stop"). Offer terms come from `revops_report.md` (free setup, 30 days, BHD 12/branch/month). The signature is the name only.
+  - **Send args:** `{draft_id, draft_hash, recipient, channel, mode}`.
+    - `mode` is in the signed args, so a dry-run token cannot authorize a live send.
+    - The operation id is `outreach:<mode>:<draft>:<attempt>`. A new attempt never re-sends, because the `sends` PRIMARY KEY and the `pending_approval` state check enforce at-most-once.
+    - `OutreachContext.dry_run=True` forces dry even for `mode=live` and reports `forced`.
+  - **Runtime:** `open_runtime` wires DenyTransport and dry-run. No real transport class exists, and no connector is wired.
+    - The ControlPlane is built with `require_host_hardening=False` for CLI use (deviation; S-0012 gap 6).
+    - Keys are generated 0600 in the state dir.
+  - **Real data:**
+    - Copies are in `/workspace/outreach_fixtures/` (outside git, `MANIFEST.sha256`; the originals still verify byte-identical after the run).
+    - The state is in `/workspace/outreach_state/` (outside git).
+- **evidence (counts only, no PII):**
+  - Real build: `records=130 leads=94 merged=36 suppressed=7 prior_pending=10 no_email=68 held=0 drafts_created=9 pending_approval=9`.
+  - Re-run: `drafts_existing=9 drafts_created=0` (idempotent).
+  - Export: `exported_pending=9`.
+  - Outbox: `pending_approval=9`, `sends=0`. Suppression rows: `bounced=1`, `closed_no_reply_after_2_touches=4` (2 suppressed leads had no email).
+  - Audit: `execute_begin=9` (all `cap.outreach.enqueue`), `outreach_sent=0`, `outreach_dry_run=0`.
+  - `REAL_DRAFTS reproducible_from_source_slots 9 violations 0`.
+- **rejected:** see R-0017.
+- **tradeoffs:**
+  - Most real leads (68/94) have no public email and get no draft. WhatsApp and walk-in channels are not modelled.
+  - Name-key dedupe can merge two different businesses that share a name.
+- **reversal criteria:** any invented fact, or any send path without a token.

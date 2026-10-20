@@ -1,9 +1,9 @@
 {
- "cycle_id": "cycle-009-economics",
- "head_sha": "a14b97ad99e5c662e30848c504947ee382cd8845 (implementation; CI-verified run 39363591310). Log-only follow-up commit recording I-0025 is verified by its own PR run.",
+ "cycle_id": "cycle-010-outreach",
+ "head_sha": "UNKNOWN until pushed; recorded in I-0026 after the PR run",
  "head_sha_note": "Updated after the PR run.",
- "baseline_sha": "521f8945dea9c2df1e0c2eaa0bfd34428ed16e18",
- "branch": "cycle-9/economics",
+ "baseline_sha": "07904d283096c8fea814d125fd5f5e66536a9817",
+ "branch": "cycle-10/outreach",
  "capabilities": [
   {
    "id": "cap.control.policy",
@@ -149,18 +149,38 @@
    "id": "cap.observability.status",
    "status": "integrated",
    "evidence": "src/economics/status.py; python -m economics status; scripts/status_ci.py (STATUS_CI ok=True); STATUS_REPORT attention=8"
+  },
+  {
+   "id": "cap.outreach.leads",
+   "status": "integrated",
+   "evidence": "src/outreach/leads.py; tests/test_outreach.py; D-0026, D-0027"
+  },
+  {
+   "id": "cap.outreach.drafts",
+   "status": "integrated",
+   "evidence": "src/outreach/drafts.py; render reproduction test; REAL_DRAFTS reproducible 9/9"
+  },
+  {
+   "id": "cap.outreach.send",
+   "status": "integrated (mock transport only; 0 real sends)",
+   "evidence": "risk 3; OUTREACH_ADVERSARIAL cases=15 violations=0; S-0012"
+  },
+  {
+   "id": "cap.outreach.tracker",
+   "status": "integrated",
+   "evidence": "outcomes UNKNOWN by default; opt-out suppression; revenue UNKNOWN; S-0012"
   }
  ],
  "verification": {
-  "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 207 tests, OK (Python 3.13.5; 3.11 and 3.12 via uv)",
+  "local_tests": "python3 -m unittest discover -s tests -t . -> Ran 217 tests, OK (Python 3.13.5)",
   "adversarial_control_plane": "ADVERSARIAL cases=20 unauthorized_executions=0",
   "adversarial_orchestrator": "ORCH_ADVERSARIAL cases=18 unauthorized_executions=0",
   "adversarial_tools": "TOOL_ADVERSARIAL cases=20 unauthorized_executions=0",
   "adversarial_sandbox": "SANDBOX_ADVERSARIAL cases=21 escapes=0",
   "adversarial_egress": "EGRESS_ADVERSARIAL cases=26 unauthorized_egress=0 proxy_attempts=22 audited_attempts=22 audit_chain_ok=True",
   "fork_bomb": "FORK_BOMB fork_count={'errno': 11, 'forked': 30} bomb_peak_procs=15 timed_out=True left=0",
-  "mutation": "146 defined; CI shards 49/49, 49/49, 48/48 = 146/146 (run 39363591310); econ subset 28/28 locally",
-  "ci": "run 39363591310 on a14b97a: success; test (3.11, 0/3) 13m36s, (3.12, 1/3) 14m13s, (3.13, 2/3) 13m08s; 207 tests OK x3; ECON_ADVERSARIAL 16/0 x3; STATUS_CI ok x3; CROSSCHECK 6/6 x3; MUTATION 49+49+48=146/146 (I-0025)",
+  "mutation": "171 defined; out_* 26/26 killed in filtered local runs; full union runs sharded in CI (I-0026)",
+  "ci": "UNKNOWN until the PR run (I-0026)",
   "adversarial_memory": "MEMORY_ADVERSARIAL cases=15 violations=0",
   "poisoned_memory": "POISONED_MEMORY proposed=5 beyond_policy=5 statuses=['denied','denied','denied','rejected','denied'] dangerous_executions=0 trusted_records=0",
   "memory_search_mode": "fts5 locally and on CI runners (3.11.17/3.12.15/3.13.16: MEMORY_SEARCH_MODE=fts5 fts5_available=True)",
@@ -171,18 +191,21 @@
   "ledger_tamper": "LEDGER_TAMPER detected=6/6",
   "crosscheck": "CROSSCHECK clean ok=True; tampers=6 detected=6 failures=[]",
   "adversarial_economics": "ECON_ADVERSARIAL cases=16 violations=0",
-  "status_report": "STATUS_REPORT attention=8 classes=[actual_usd_unknown, crosscheck_failed, day_usd_global_burn>=80%, in_doubt, kill_switch_engaged, quarantined, reservation_without_outcome, skipped_gaps]"
+  "status_report": "STATUS_REPORT attention=8 classes=[actual_usd_unknown, crosscheck_failed, day_usd_global_burn>=80%, in_doubt, kill_switch_engaged, quarantined, reservation_without_outcome, skipped_gaps]",
+  "adversarial_outreach": "OUTREACH_ADVERSARIAL cases=15 violations=0",
+  "outreach_real_data": "records=130 leads=94 drafts_created=9 pending_approval=9 sends=0 (counts only; data outside git)"
  },
  "economics": {
-  "expected_revenue_usd": 0,
+  "expected_revenue_usd": "UNKNOWN (revops target >= BHD 12 by 2026-11-30 is a goal, not evidence)",
   "estimated_cost": "ESTIMATE: one agent session; token and dollar cost UNKNOWN (the agent session itself is not metered by the repo)",
   "measured_cost_usd": "UNKNOWN (no billing source; repo now meters per-op wall time, tool calls, proxy egress bytes, provider usage when reported)",
   "telemetry": "cycle-009 EconomicsLedger: every governed op that executes has one MAC'd, anchored row with expected_value, estimated_cost, actual_cost, expected_revenue, actual_revenue, risk, confidence, each with provenance measured|configured_estimate|unknown",
   "live_money_prerequisites": "see RM-0011: telemetry MET; spend caps MET for estimates; billed cost, balance guards, exposure/drawdown, venue allowlist, reconciliation, external witness NOT MET; emergency stop PARTIAL",
-  "latency_cost": "economics ledger overhead p50 ~1.3 ms locally, ~2.2 ms on CI 3.13 runner (B-0017, I-0025)"
+  "latency_cost": "economics ledger overhead p50 ~1.3 ms locally, ~2.2 ms on CI 3.13 runner (B-0017, I-0025)",
+  "outreach": "cycle-010: 9 real drafts pending_approval, 0 sends; revenue UNKNOWN until verified"
  },
- "last_updated": "2026-10-20T03:40:00Z",
- "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/9 (open, not merged)",
+ "last_updated": "2026-10-20T07:55:00Z",
+ "pull_request": "UNKNOWN (opened after push)",
  "cycle_history": [
   {
    "cycle_id": "cycle-001-control-plane",
@@ -239,6 +262,13 @@
    "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/8",
    "merged_to_main": "521f8945dea9c2df1e0c2eaa0bfd34428ed16e18",
    "ci": "success: run 39358456324 on 4f57370 and run 39360311698 on 7e87b90 (191 tests OK x3; SCHEDULER_ADVERSARIAL 13/0; CROSSCHECK 6/6; MUTATION 118/118 sharded; slowest job 18m21s) (I-0024)"
+  },
+  {
+   "cycle_id": "cycle-009-economics",
+   "head_sha": "7bff14c71a9501c5218c2d983582cdb1436800ef",
+   "pull_request": "https://github.com/MuhamedZanabal/grok-bot-ecosystem/pull/9",
+   "merged_to_main": "07904d283096c8fea814d125fd5f5e66536a9817",
+   "ci": "success: run 39363591310 on a14b97a and run 39364965564 on 7bff14c (207 tests OK x3; ECON_ADVERSARIAL 16/0; STATUS_CI ok; MUTATION 146/146 sharded) (I-0025)"
   }
  ],
  "baseline_inspection_cycle_8": {

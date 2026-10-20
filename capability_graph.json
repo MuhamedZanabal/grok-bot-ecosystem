@@ -266,6 +266,40 @@
     "src/economics/status.py"
    ],
    "expected_value": 0.6
+  },
+  {
+   "id": "cap.outreach.leads",
+   "description": "Untrusted lead CSV ingest, sanitization, dedupe, rule scoring with per-rule evidence (cycle-010)",
+   "implementations": [
+    "src/outreach/leads.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.outreach.drafts",
+   "description": "Template drafts with slot->field->source personalization; no model, no invented facts (cycle-010)",
+   "implementations": [
+    "src/outreach/drafts.py"
+   ],
+   "expected_value": 0.5
+  },
+  {
+   "id": "cap.outreach.send",
+   "description": "Risk-3 send of one approved draft; token bound to draft hash/recipient/channel/mode; caps, suppression, idempotency; DenyTransport + dry-run default, mock only (cycle-010)",
+   "implementations": [
+    "src/outreach/handlers.py",
+    "src/outreach/store.py"
+   ],
+   "expected_value": 0.6
+  },
+  {
+   "id": "cap.outreach.tracker",
+   "description": "Reply/outcome tracker, UNKNOWN by default; opt-out suppresses; revenue UNKNOWN until verified (cycle-010)",
+   "implementations": [
+    "src/outreach/handlers.py",
+    "src/outreach/store.py"
+   ],
+   "expected_value": 0.4
   }
  ],
  "expected_value_scale": "relative 0-1 judgement, not a measured quantity",
@@ -469,6 +503,36 @@
    "from": "cap.observability.status",
    "to": "cap.economics.ledger",
    "type": "reports_on"
+  },
+  {
+   "from": "cap.outreach.drafts",
+   "to": "cap.outreach.leads",
+   "type": "personalizes_only_from"
+  },
+  {
+   "from": "cap.outreach.send",
+   "to": "cap.control.approvals",
+   "type": "requires_token_from"
+  },
+  {
+   "from": "cap.outreach.send",
+   "to": "cap.control.idempotency",
+   "type": "at_most_once_via"
+  },
+  {
+   "from": "cap.outreach.send",
+   "to": "cap.economics.ledger",
+   "type": "costed_in"
+  },
+  {
+   "from": "cap.outreach.tracker",
+   "to": "cap.outreach.send",
+   "type": "suppresses"
+  },
+  {
+   "from": "cap.workflow.scheduler",
+   "to": "cap.outreach.send",
+   "type": "refused_unattended"
   }
  ]
 }

@@ -177,3 +177,18 @@
 - **selected:** recommend (a), paper venue only, then (b). The user decides.
 - **rejected:** any real-venue or real-wallet integration before (a) and (b) are evidenced. Phantom/wallet MCP tools available to the operator are explicitly out of scope for repo code.
 - **reversal criteria:** the user directs otherwise, with the risk recorded.
+
+## RM-0012: After cycle-010
+- **decision_id:** RM-0012
+- **date:** 2026-10-20
+- **problem:** Next steps for the outreach workflow and the live-money prerequisites.
+- **evidence:**
+  - 9 real drafts are pending approval; 0 sends (D-0027).
+  - S-0012 gap 1 (approval key custody) is the weakest link before any real transport.
+  - RM-0011's live-money table is unchanged. Outreach moves no money, and revenue stays UNKNOWN (no reconciler).
+- **options:**
+  - (a) an approver path with the approval key outside the box (out-of-box signing), plus reply ingestion (read-only) feeding the tracker;
+  - (b) a real email transport behind cap.outreach.send, only after (a) and the user's explicit authorization;
+  - (c) RM-0011 (a): paper-venue reconciliation.
+- **selected:** recommend (a) next. (b) only on the user's explicit instruction, in its own cycle.
+- **reversal criteria:** the user directs otherwise.
